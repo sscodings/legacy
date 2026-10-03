@@ -28,6 +28,37 @@ import mongoose from "mongoose";
 
 const MONGODB_URI = process.env.MONGODB_URI?.trim();
 
+/**
+ * Expands a mongodb+srv:// URI into a standard mongodb:// one using a dedicated resolver on public DNS.
+ * dns.setServers() above doesn't reach dns.promises (what the driver uses) in every runtime, so ISP
+ * resolvers that refuse SRV queries would otherwise still break the connection.
+ */
+async function expandSrvUri(uri: string): Promise<string> {
+  if (!uri.startsWith("mongodb+srv://")) return uri;
+  try {
+    const url = new URL(uri);
+    const resolver = new dns.promises.Resolver();
+    resolver.setServers(["8.8.8.8", "1.1.1.1"]);
+
+    const [srv, txt] = await Promise.all([
+      resolver.resolveSrv(`_mongodb._tcp.${url.hostname}`),
+      resolver.resolveTxt(url.hostname).catch(() => [] as string[][]),
+    ]);
+
+    const hosts = srv.map((r) => `${r.name}:${r.port}`).join(",");
+    const params = new URLSearchParams(txt.flat().join("&"));
+    params.set("tls", "true");
+    url.searchParams.forEach((value, key) => params.set(key, value));
+
+    const auth = url.username
+      ? `${url.username}${url.password ? `:${url.password}` : ""}@`
+      : "";
+    return `mongodb://${auth}${hosts}${url.pathname}?${params.toString()}`;
+  } catch {
+    return uri; // let the driver surface its own error
+  }
+}
+
 interface MongooseCache {
   conn: typeof mongoose | null;
   promise: Promise<typeof mongoose> | null;
@@ -62,8 +93,8 @@ export async function connectToDatabase(): Promise<typeof mongoose | null> {
       serverSelectionTimeoutMS: 5000,
     };
 
-    cached.promise = mongoose
-      .connect(MONGODB_URI, opts)
+    cached.promise = expandSrvUri(MONGODB_URI)
+      .then((uri) => mongoose.connect(uri, opts))
       .then((m) => {
         console.log("[MongoDB] Connected successfully to MongoDB Atlas.");
         return m;
