@@ -146,7 +146,6 @@ export function SealedMessageHeirPanel({ vaultAddress, heirAddress, isHeir }: Se
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Enrollment failed");
-      setShowUpgradeModal(false);
       await load();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Passkey enrollment failed";
@@ -194,7 +193,6 @@ export function SealedMessageHeirPanel({ vaultAddress, heirAddress, isHeir }: Se
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Enrollment failed");
-      setShowUpgradeModal(false);
       await load();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Wallet key enrollment failed";
