@@ -89,7 +89,7 @@ bun install             # or npm/yarn/pnpm install
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). The dev server hot-reloads as you edit.
 
 ---
 
