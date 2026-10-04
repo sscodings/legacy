@@ -76,7 +76,7 @@ export function ActivityLog({
           items.push({
             id: `heir-add-${l.transactionHash}-${l.logIndex}`,
             type: "HEIR_CHANGE",
-            title: "BENEFICIARY DESIGNATED",
+            title: "HEIR ADDED",
             description: `Heir address ${l.args.heir?.slice(0, 8)}…${l.args.heir?.slice(-6)} authorized for succession claims.`,
             timestamp: Math.floor(Date.now() / 1000),
             blockNumber: l.blockNumber,

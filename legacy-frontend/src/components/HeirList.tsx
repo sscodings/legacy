@@ -128,7 +128,7 @@ export function HeirList({
                 fontFamily: "var(--font-data)",
               }}
             >
-              1 // Beneficiary Name
+              Their name
             </label>
             <input
               id="heir-name-input"
@@ -162,14 +162,14 @@ export function HeirList({
                 fontFamily: "var(--font-data)",
               }}
             >
-              2 // Wallet Address
+              Their wallet address
             </label>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               <input
                 id="heir-address-input"
                 type="text"
                 className="input-instrument font-data"
-                placeholder="0x… (42-character heir wallet address)"
+                placeholder="0x… wallet address"
                 value={newHeirInput}
                 onChange={(e) => setNewHeirInput(e.target.value)}
                 disabled={isSubmitting || isLoading}
@@ -190,7 +190,7 @@ export function HeirList({
                 disabled={isSubmitting || isLoading || !newHeirName.trim() || !newHeirInput.trim()}
                 style={{ padding: "12px 24px", fontSize: "0.8125rem", whiteSpace: "nowrap", borderRadius: 0 }}
               >
-                {isSubmitting ? "DESIGNATING…" : "+ DESIGNATE HEIR"}
+                {isSubmitting ? "ADDING…" : "+ ADD HEIR"}
               </button>
             </div>
           </div>

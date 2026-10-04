@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 import { useReadContract } from "wagmi";
 import { decodeAbiParameters } from "viem";
 import { IDKitRequestWidget, orbLegacy, type RpContext, type IDKitResult } from "@worldcoin/idkit";
@@ -84,6 +85,12 @@ export function CheckInModal({
     query: { enabled: Boolean(verifierAddress) && Boolean(vaultAddress) },
   });
 
+  // Step aside while the World ID overlay is up so it keeps its own focus and Escape handling.
+  const dialogRef = useDialogBehavior<HTMLDivElement>(
+    isOpen && !isIdkitOpen,
+    isProcessing ? undefined : onClose
+  );
+
   if (!isOpen) return null;
 
   const signalHex = computeSignalHashHex(vaultAddress, ownerAddress);
@@ -141,7 +148,7 @@ export function CheckInModal({
         msg.includes("gas limit too high") ||
         msg.includes("0x12c1")
       ) {
-        msg = "Verification reverted: This vault is linked to the production World ID router verifier (0x9200aba1...), which rejects testnet roots. Please close this modal and click '+ Deploy Another Vault' on the dashboard to create a vault connected to the verified testnet verifier (0xbc53b9fa...), where staging proofs work smoothly.";
+        msg = "Verification reverted: This vault is linked to the production World ID router verifier (0x9200aba1...), which rejects testnet roots. Please close this modal and click '+ Create new vault' on the dashboard to create a vault connected to the verified testnet verifier (0xbc53b9fa...), where staging proofs work smoothly.";
       }
       setErrorText(msg);
       throw err;
@@ -303,6 +310,7 @@ export function CheckInModal({
         }}
       >
         <div
+          ref={dialogRef}
           className="panel-elevated modal-surface-animate"
           style={{
             width: "100%",
@@ -322,7 +330,7 @@ export function CheckInModal({
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}>
             <div>
               <span className="section-tag" style={{ margin: "0 0 6px", fontSize: "0.6875rem" }}>
-                [ 00 // ORB VERIFICATION INTERFACE ]
+                {livenessRegistered ? "[ CHECK-IN ]" : "[ ONE-TIME SETUP ]"}
               </span>
               <h2
                 id="checkin-modal-title"
@@ -337,7 +345,7 @@ export function CheckInModal({
                   margin: 0,
                 }}
               >
-                {livenessRegistered ? "Conduct Routine Check-In" : "Register Initial Liveness"}
+                {livenessRegistered ? "Check in" : "Set up World ID"}
               </h2>
               <p
                 style={{
@@ -348,8 +356,8 @@ export function CheckInModal({
                 }}
               >
                 {livenessRegistered
-                  ? "Verify with your World ID to reset your heartbeat timer."
-                  : "Verify with your World ID to activate automated heartbeat protection."}
+                  ? "Prove you're still here. This restarts your timer and cancels any open claim."
+                  : "Verify once with World ID to switch on check-ins for this vault."}
               </p>
             </div>
             <button
@@ -369,7 +377,7 @@ export function CheckInModal({
               }}
               aria-label="Close dialog"
             >
-              [ ESC ✕ ]
+              Close ✕
             </button>
           </div>
 
@@ -386,12 +394,13 @@ export function CheckInModal({
               }}
             >
               <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", textTransform: "uppercase" }}>
-                Verification Target
+                Verify with
               </span>
-              <div style={{ display: "flex", gap: "6px" }}>
+              <div role="group" aria-label="Verification environment" style={{ display: "flex", gap: "6px" }}>
                 <button
                   type="button"
                   onClick={() => setEnvironment("staging")}
+                  aria-pressed={environment === "staging"}
                   style={{
                     padding: "4px 8px",
                     fontSize: "0.6875rem",
@@ -402,11 +411,12 @@ export function CheckInModal({
                     cursor: "pointer",
                   }}
                 >
-                  Simulator (Staging)
+                  Simulator (test)
                 </button>
                 <button
                   type="button"
                   onClick={() => setEnvironment("production")}
+                  aria-pressed={environment === "production"}
                   style={{
                     padding: "4px 8px",
                     fontSize: "0.6875rem",
@@ -417,7 +427,7 @@ export function CheckInModal({
                     cursor: "pointer",
                   }}
                 >
-                  World App (Production)
+                  World App (real)
                 </button>
               </div>
             </div>
@@ -436,11 +446,11 @@ export function CheckInModal({
             }}
           >
             <span className="section-tag" style={{ margin: 0, fontSize: "0.625rem" }}>
-              [ VERIFICATION DETAILS ]
+              [ DETAILS ]
             </span>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ color: "var(--text-secondary)", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                Vault Address
+                Vault
               </span>
               <span className="font-data" style={{ color: "#ffffff", fontSize: "0.8125rem" }}>
                 {vaultAddress.slice(0, 10)}...{vaultAddress.slice(-8)}
@@ -448,10 +458,10 @@ export function CheckInModal({
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ color: "var(--text-secondary)", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                Verification Level
+                Verification
               </span>
               <span style={{ color: "var(--accent-brass)", fontFamily: "var(--font-data)", fontSize: "0.75rem", fontWeight: 600 }}>
-                World ID Orb Verified
+                World ID (Orb)
               </span>
             </div>
           </div>
@@ -469,7 +479,7 @@ export function CheckInModal({
               }}
             >
               <div style={{ color: "var(--status-amber)", fontWeight: 600, marginBottom: "2px" }}>
-                [ ⚠️ RP KEY NOTICE ]
+                [ NOTICE ]
               </div>
               {warningText}
             </div>
@@ -478,6 +488,7 @@ export function CheckInModal({
           {/* Error Banner */}
           {errorText && (
             <div
+              role="alert"
               style={{
                 padding: "12px 16px",
                 backgroundColor: "rgba(193, 80, 63, 0.12)",
@@ -489,7 +500,7 @@ export function CheckInModal({
               }}
             >
               <div style={{ color: "var(--status-red)", fontFamily: "var(--font-data)", fontSize: "0.6875rem", letterSpacing: "0.08em", marginBottom: "4px" }}>
-                [ VERIFICATION NOTICE ]
+                [ COULDN&apos;T VERIFY ]
               </div>
               {errorText}
             </div>
@@ -511,7 +522,7 @@ export function CheckInModal({
             }}
           >
             <span>
-              {isProcessing ? "PREPARING WORLD ID REQUEST…" : "LAUNCH OFFICIAL WORLD ID (IDKIT)"}
+              {isProcessing ? "OPENING WORLD ID…" : "CONTINUE WITH WORLD ID"}
             </span>
             <span className="arrow-icon" aria-hidden="true">→</span>
           </button>
@@ -527,7 +538,7 @@ export function CheckInModal({
               margin: 0,
             }}
           >
-            Strictly non-custodial · Cryptographically verified on World Chain
+            Non-custodial · Verified on World Chain
           </p>
         </div>
       </div>

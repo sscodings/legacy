@@ -414,7 +414,7 @@ export function ClaimPortalSkeleton() {
 export function HomeHeroSkeleton() {
   return (
     <div className="landing-canvas animate-fade-up">
-      <main className="hero-content-wrap" role="main">
+      <section className="hero-content-wrap" aria-hidden="true">
         {/* Giant Title Lines Skeleton */}
         <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "24px" }}>
           <Skeleton width="70%" height="56px" variant="brass" />
@@ -440,7 +440,7 @@ export function HomeHeroSkeleton() {
             </div>
           ))}
         </div>
-      </main>
+      </section>
     </div>
   );
 }

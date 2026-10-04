@@ -144,14 +144,14 @@ export function LivenessPanel({
           <span>
             Check in every <strong>{humanDuration(intervalSec)}</strong>
           </span>
-          <span>
+          <span title="How long after a missed check-in before your heirs can start a claim">
             Grace <strong>{humanDuration(graceSec)}</strong>
           </span>
-          <span>
+          <span title="How long you have to cancel a claim by checking in">
             Veto window <strong>{humanDuration(Number(contestableWindow))}</strong>
           </span>
           <button type="button" onClick={onEditTiming} className="flow-link status-timing-edit">
-            Change
+            Change timing →
           </button>
         </div>
       </div>

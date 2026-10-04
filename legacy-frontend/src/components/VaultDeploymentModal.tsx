@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 
 export type DeploymentStage =
   | "idle"
@@ -93,6 +94,9 @@ export function VaultDeploymentModal({
     setLastStage(stage);
   }
 
+  // Only dismissible once the flow has settled; never mid-transaction.
+  const dialogRef = useDialogBehavior<HTMLDivElement>(isOpen, stage === "error" || stage === "success" ? onClose : undefined);
+
   if (!isOpen) return null;
 
   const isDone = stage === "success";
@@ -116,7 +120,7 @@ export function VaultDeploymentModal({
         if (e.target === e.currentTarget && (isError || isDone)) onClose();
       }}
     >
-      <div className="deployment-modal" role="dialog" aria-modal="true" aria-labelledby="deploy-title">
+      <div ref={dialogRef} className="deployment-modal" role="dialog" aria-modal="true" aria-labelledby="deploy-title">
         <div className="flow-header">
           <h2 id="deploy-title" className="flow-title">
             {title}

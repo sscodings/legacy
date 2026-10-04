@@ -139,7 +139,7 @@ export function GuardianList({
           <input
             type="text"
             className="input-instrument font-data"
-            placeholder="0x… (42-character guardian wallet address)"
+            placeholder="0x… guardian wallet address"
             value={newGuardianInput}
             onChange={(e) => setNewGuardianInput(e.target.value)}
             disabled={isSubmitting || isLoading}

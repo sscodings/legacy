@@ -271,7 +271,7 @@ export function SealedMessagePanel({ vaultAddress, ownerAddress, heirs, heirName
           </div>
 
           {isLoading || !state ? (
-            <div className="skeleton-shimmer" style={{ width: "100%", height: 140, borderRadius: 12 }} />
+            <div className="skeleton-shimmer" style={{ width: "100%", height: 140, borderRadius: 0 }} />
           ) : !state.enrolled ? (
             <div className="console-alert console-alert--warning">
               <div className="console-alert-body">
@@ -335,7 +335,7 @@ export function SealedMessagePanel({ vaultAddress, ownerAddress, heirs, heirName
                       alignItems: "center",
                       gap: 8,
                       padding: "28px 20px",
-                      borderRadius: 12,
+                      borderRadius: 0,
                       border: "1px dashed rgba(255, 255, 255, 0.18)",
                       background: "rgba(255, 255, 255, 0.02)",
                       color: "var(--text-secondary)",
@@ -361,7 +361,7 @@ export function SealedMessagePanel({ vaultAddress, ownerAddress, heirs, heirName
                     </span>
                   </button>
                 ) : (
-                  <div className="setting-row" style={{ borderRadius: 10, border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                  <div className="setting-row" style={{ borderRadius: 0, border: "1px solid rgba(255, 255, 255, 0.08)" }}>
                     <div className="setting-label" style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ color: "var(--text-secondary)", flexShrink: 0 }}>
                         <rect x="2" y="5" width="14" height="14" rx="2" />

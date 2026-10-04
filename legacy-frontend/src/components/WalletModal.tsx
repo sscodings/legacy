@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 import { useAccount, useConnect, useDisconnect, useSwitchChain, useChainId } from "wagmi";
 import { worldChainSepolia } from "@/lib/constants";
 
@@ -46,17 +47,9 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
     }
   }, [isConnected]);
 
-  // Handle escape key to close modals
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsConnectOpen(false);
-        setIsAccountOpen(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  // Escape, scroll lock, focus trap and focus restore for each dialog
+  const connectDialogRef = useDialogBehavior<HTMLDivElement>(isConnectOpen, () => setIsConnectOpen(false));
+  const accountDialogRef = useDialogBehavior<HTMLDivElement>(isAccountOpen && Boolean(address), () => setIsAccountOpen(false));
 
   const handleConnect = async (connectorId: string) => {
     setErrorMessage(null);
@@ -135,6 +128,7 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
       {/* ─── Connect Wallet Modal ─── */}
       {isConnectOpen && (
         <div
+          ref={connectDialogRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="connect-modal-title"
@@ -197,7 +191,7 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
                   padding: "10px 14px",
                   backgroundColor: "rgba(193, 80, 63, 0.12)",
                   border: "1px solid var(--status-red)",
-                  borderRadius: "6px",
+                  borderRadius: 0,
                   fontSize: "0.8125rem",
                   color: "var(--text-primary)",
                 }}
@@ -220,7 +214,7 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
                   padding: "14px 16px",
                   backgroundColor: "var(--bg-base)",
                   border: "1px solid var(--border-hairline)",
-                  borderRadius: "6px",
+                  borderRadius: 0,
                   color: "var(--text-primary)",
                   cursor: isPending ? "wait" : "pointer",
                   textAlign: "left",
@@ -272,7 +266,7 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
                     color: "var(--accent-brass)",
                     backgroundColor: "var(--accent-brass-dim)",
                     padding: "3px 8px",
-                    borderRadius: "4px",
+                    borderRadius: 0,
                   }}
                 >
                   MetaMask Connect
@@ -291,7 +285,7 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
                   padding: "14px 16px",
                   backgroundColor: "var(--bg-base)",
                   border: "1px solid var(--border-hairline)",
-                  borderRadius: "6px",
+                  borderRadius: 0,
                   color: "var(--text-primary)",
                   cursor: isPending ? "wait" : "pointer",
                   textAlign: "left",
@@ -326,7 +320,7 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
                     color: "var(--text-secondary)",
                     backgroundColor: "var(--bg-elevated)",
                     padding: "3px 8px",
-                    borderRadius: "4px",
+                    borderRadius: 0,
                   }}
                 >
                   Injected
@@ -344,7 +338,7 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
                   gap: "10px",
                   padding: "10px",
                   backgroundColor: "var(--accent-brass-dim)",
-                  borderRadius: "6px",
+                  borderRadius: 0,
                   fontSize: "0.8125rem",
                   color: "var(--accent-brass)",
                 }}
@@ -369,6 +363,7 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
       {/* ─── Account Details Modal ─── */}
       {isAccountOpen && address && (
         <div
+          ref={accountDialogRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="account-modal-title"
@@ -429,7 +424,7 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
               style={{
                 backgroundColor: "var(--bg-base)",
                 border: "1px solid var(--border-hairline)",
-                borderRadius: "6px",
+                borderRadius: 0,
                 padding: "16px",
                 display: "flex",
                 flexDirection: "column",
@@ -508,7 +503,7 @@ export function WalletModalProvider({ children }: { children: ReactNode }) {
               style={{
                 backgroundColor: "var(--bg-base)",
                 border: "1px solid var(--border-hairline)",
-                borderRadius: "6px",
+                borderRadius: 0,
                 padding: "14px 16px",
                 display: "flex",
                 justifyContent: "space-between",

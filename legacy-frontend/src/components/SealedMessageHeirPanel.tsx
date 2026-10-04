@@ -176,7 +176,7 @@ export function SealedMessageHeirPanel({ vaultAddress, heirAddress, isHeir }: Se
         </h3>
 
 {isLoading || !state ? (
-          <div className="skeleton-shimmer" style={{ width: "100%", height: 60, borderRadius: 12 }} />
+          <div className="skeleton-shimmer" style={{ width: "100%", height: 60, borderRadius: 0 }} />
         ) : !state.enrolled ? (
           <>
             <p className="panel-lead">
@@ -249,7 +249,7 @@ export function SealedMessageHeirPanel({ vaultAddress, heirAddress, isHeir }: Se
                       <span className="network-dot" style={{ backgroundColor: "var(--status-green)" }} />
                       Decrypted · visible only in your browser
                     </span>
-                    <video controls src={revealedVideoUrl} style={{ width: "100%", maxHeight: 420, borderRadius: 12, background: "#000000" }} />
+                    <video controls src={revealedVideoUrl} style={{ width: "100%", maxHeight: 420, borderRadius: 0, background: "#000000" }} />
                     <button
                       type="button"
                       onClick={() => setRevealedVideoUrl(null)}

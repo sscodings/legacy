@@ -118,7 +118,10 @@ export default function VaultDashboardPage() {
   const syncVaultToUrl = (vaultAddr: `0x${string}` | null) => {
     const url = new URL(window.location.href);
     if (vaultAddr) url.searchParams.set("v", vaultAddr);
-    else url.searchParams.delete("v");
+    else {
+      url.searchParams.delete("v");
+      url.searchParams.delete("tab");
+    }
     window.history.replaceState(null, "", url);
   };
 
@@ -130,6 +133,30 @@ export default function VaultDashboardPage() {
     const tab = params.get("tab");
     if (tab && (VAULT_TABS as readonly string[]).includes(tab)) setActiveTab(tab as VaultTab);
   }, []);
+
+  // Tabs are deep-linkable (?tab=assets) so refresh/share lands on the same section.
+  const selectTab = (tab: VaultTab) => {
+    setActiveTab(tab);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tab);
+      window.history.replaceState(null, "", url);
+    } catch {}
+  };
+
+  // WAI-ARIA tabs: arrow keys move between tabs, Home/End jump to the ends.
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = VAULT_TABS.length - 1;
+    let next = index;
+    if (e.key === "ArrowRight") next = index === last ? 0 : index + 1;
+    else if (e.key === "ArrowLeft") next = index === 0 ? last : index - 1;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = last;
+    else return;
+    e.preventDefault();
+    selectTab(VAULT_TABS[next]);
+    document.getElementById(`tab-${VAULT_TABS[next]}`)?.focus();
+  };
 
   const handleSelectVault = (vaultAddr: `0x${string}`) => {
     setSelectedVaultState(vaultAddr);
@@ -1071,7 +1098,7 @@ export default function VaultDashboardPage() {
                     livenessRegistered={livenessRegistered}
                     isSettling={isSettling}
                     onOpenCheckIn={() => setIsCheckInModalOpen(true)}
-                    onEditTiming={() => setActiveTab("parameters")}
+                    onEditTiming={() => selectTab("parameters")}
                   />
                 )}
 
@@ -1086,7 +1113,7 @@ export default function VaultDashboardPage() {
                     { id: "activity", label: `Activity` },
                     { id: "watchdog", label: `Alerts` },
                     { id: "message", label: `Sealed Message` },
-                  ].map((tab) => {
+                  ].map((tab, index) => {
                     const isActive = activeTab === tab.id;
                     return (
                       <button
@@ -1096,7 +1123,9 @@ export default function VaultDashboardPage() {
                         id={`tab-${tab.id}`}
                         aria-selected={isActive}
                         aria-controls={`tabpanel-${tab.id}`}
-                        onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                        tabIndex={isActive ? 0 : -1}
+                        onKeyDown={(e) => handleTabKeyDown(e, index)}
+                        onClick={() => selectTab(tab.id as VaultTab)}
                         className={`dashboard-tab${isActive ? " dashboard-tab--active" : ""}`}
                       >
                         {tab.label}
@@ -1179,7 +1208,7 @@ export default function VaultDashboardPage() {
                       ownerAddress={address}
                       heirs={heirs}
                       heirNames={heirNames}
-                      onGoToHeirs={() => setActiveTab("heirs")}
+                      onGoToHeirs={() => selectTab("heirs")}
                     />
                   )}
                 </div>
