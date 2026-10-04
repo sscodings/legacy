@@ -28,10 +28,13 @@ const MAX_VIDEO_BYTES = 190 * 1024 * 1024;
 interface InheritanceState {
   enrolled: boolean;
   heirPublicKey: string | null;
+  keyScheme?: "wallet-signature" | "passkey-prf" | null;
   hasSealed: boolean;
   sealedAt: number | null;
   hasSealedVideo: boolean;
   sealedVideoAt: number | null;
+  needsReseal?: boolean;
+  needsResealVideo?: boolean;
 }
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -70,29 +73,38 @@ export function SealedMessagePanel({ vaultAddress, ownerAddress, heirs, heirName
         setState({
           enrolled: Boolean(data.enrolled),
           heirPublicKey: data.heirPublicKey ?? null,
+          keyScheme: data.keyScheme ?? null,
           hasSealed: Boolean(data.hasSealed),
           sealedAt: data.sealedAt ?? null,
           hasSealedVideo: Boolean(data.hasSealedVideo),
           sealedVideoAt: data.sealedVideoAt ?? null,
+          needsReseal: Boolean(data.needsReseal),
+          needsResealVideo: Boolean(data.needsResealVideo),
         });
       } else {
         setState({
           enrolled: false,
           heirPublicKey: null,
+          keyScheme: null,
           hasSealed: false,
           sealedAt: null,
           hasSealedVideo: false,
           sealedVideoAt: null,
+          needsReseal: false,
+          needsResealVideo: false,
         });
       }
     } catch {
       setState({
         enrolled: false,
         heirPublicKey: null,
+        keyScheme: null,
         hasSealed: false,
         sealedAt: null,
         hasSealedVideo: false,
         sealedVideoAt: null,
+        needsReseal: false,
+        needsResealVideo: false,
       });
     } finally {
       setIsLoading(false);
@@ -284,6 +296,25 @@ export function SealedMessagePanel({ vaultAddress, ownerAddress, heirs, heirName
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <span className="state-pill" style={{ fontSize: "0.75rem" }}>
+                  {state.keyScheme === "passkey-prf" ? "🔐 Passkey enrolled (biometric)" : "🔑 Wallet signature key"}
+                </span>
+              </div>
+
+              {(state.needsReseal || state.needsResealVideo) && (
+                <div className="console-alert console-alert--warning">
+                  <div className="console-alert-body">
+                    <strong>Key updated by heir</strong>
+                    <p>
+                      {nameOf(selectedHeir!)} updated or upgraded their decryption key. The existing sealed{" "}
+                      {state.needsReseal && state.needsResealVideo ? "message and video" : state.needsReseal ? "message" : "video"}{" "}
+                      cannot be read by them until you reseal with their new key.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
@@ -300,7 +331,13 @@ export function SealedMessagePanel({ vaultAddress, ownerAddress, heirs, heirName
                     : "You won't be able to read it again after sealing."}
                 </span>
                 <button type="button" onClick={handleSeal} disabled={isSealing || text.trim().length === 0} className="flow-btn">
-                  {isSealing ? "Sealing…" : state.hasSealed ? "Replace message" : "Seal message"}
+                  {isSealing
+                    ? "Sealing…"
+                    : state.needsReseal
+                    ? "Reseal message"
+                    : state.hasSealed
+                    ? "Replace message"
+                    : "Seal message"}
                 </button>
               </div>
 
@@ -414,7 +451,13 @@ export function SealedMessagePanel({ vaultAddress, ownerAddress, heirs, heirName
                   className="flow-btn flow-btn--ghost"
                   style={{ alignSelf: "flex-start" }}
                 >
-                  {isSealingVideo ? "Sealing video…" : state.hasSealedVideo ? "Replace video" : "Seal video"}
+                  {isSealingVideo
+                    ? "Sealing video…"
+                    : state.needsResealVideo
+                    ? "Reseal video"
+                    : state.hasSealedVideo
+                    ? "Replace video"
+                    : "Seal video"}
                 </button>
               </div>
             </div>
