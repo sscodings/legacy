@@ -181,7 +181,7 @@ export function LandingHero({ onOpenVault, hasVaults = false }: LandingHeroProps
   return (
     <div className="landing-canvas">
       {/* ── Hero Main Content ────────────────────────────────── */}
-      <main className="hero-content-wrap" role="main">
+      <section className="hero-content-wrap" aria-label="Legacy introduction">
         {/* Giant Stacked Title in Murs Gothic */}
         <h1 className="hero-giant-title animate-fade-up" style={{ animationDelay: "0ms" }}>
           <span>AUTONOMOUS</span>
@@ -230,7 +230,7 @@ export function LandingHero({ onOpenVault, hasVaults = false }: LandingHeroProps
             </div>
           ))}
         </dl>
-      </main>
+      </section>
 
       {/* ── Section 1: How it works ──────────────────────────── */}
       <section id="lifecycle" className="landing-section-wrap" aria-labelledby="lifecycle-title">

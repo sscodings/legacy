@@ -516,7 +516,7 @@ export function VaultParameters({
           gap: 28,
           flexWrap: "wrap",
           padding: "18px 20px",
-          borderRadius: 12,
+          borderRadius: 0,
           border: "1px solid rgba(255, 255, 255, 0.08)",
           background: "rgba(255, 255, 255, 0.02)",
         }}

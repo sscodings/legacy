@@ -424,6 +424,16 @@ export default function HeirClaimPortal() {
                   Connect wallet
                 </button>
               </div>
+              <p style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", margin: 0 }}>
+                Only want to see whether a vault is still active?{" "}
+                <Link
+                  href={vaultAddress ? `/lookup?v=${vaultAddress}` : "/lookup"}
+                  className="flow-link"
+                >
+                  Look it up without a wallet
+                </Link>
+                .
+              </p>
             </div>
           </div>
         </div>

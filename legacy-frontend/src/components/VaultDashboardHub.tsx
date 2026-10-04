@@ -306,18 +306,21 @@ export function VaultDashboardHub({
             What you&apos;re leaving behind, and what&apos;s been left to you.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={isWrongChain ? onSwitchChain : onCreateVault}
-          disabled={isCreatingVault}
-          className={isWrongChain ? "btn-chain-wrong" : "btn-hero-action"}
-          style={{ marginTop: 0, padding: "12px 24px", flexShrink: 0 }}
-        >
-          <span>
-            {isCreatingVault ? "Deploying…" : isWrongChain ? "Switch Network" : "+ Create New Vault"}
-          </span>
-          {!isCreatingVault && !isWrongChain && <span className="arrow-icon" aria-hidden="true">→</span>}
-        </button>
+        {/* With no vault yet, the empty state below carries the one create action */}
+        {(hasOwned || isLoadingOwned || isWrongChain) && (
+          <button
+            type="button"
+            onClick={isWrongChain ? onSwitchChain : onCreateVault}
+            disabled={isCreatingVault}
+            className={isWrongChain ? "btn-chain-wrong" : "btn-hero-action"}
+            style={{ marginTop: 0, padding: "12px 24px", flexShrink: 0 }}
+          >
+            <span>
+              {isCreatingVault ? "Deploying…" : isWrongChain ? "Switch Network" : "+ Create New Vault"}
+            </span>
+            {!isCreatingVault && !isWrongChain && <span className="arrow-icon" aria-hidden="true">→</span>}
+          </button>
+        )}
       </div>
 
       {/* ── Your Vaults ─────────────────────────────────────────── */}
@@ -351,10 +354,10 @@ export function VaultDashboardHub({
               type="button"
               onClick={isWrongChain ? onSwitchChain : onCreateVault}
               disabled={isCreatingVault}
-              className={isWrongChain ? "btn-chain-wrong" : "btn-brass"}
-              style={{ padding: "10px 20px", fontSize: "0.8125rem", borderRadius: 0, flexShrink: 0 }}
+              className={isWrongChain ? "btn-chain-wrong" : "btn-hero-action"}
+              style={{ marginTop: 0, padding: "12px 24px", flexShrink: 0 }}
             >
-              {isCreatingVault ? "Deploying…" : isWrongChain ? "Switch Network" : "+ Create Vault"}
+              {isCreatingVault ? "Deploying…" : isWrongChain ? "Switch Network" : "+ Create your first vault"}
             </button>
           </div>
         ) : (

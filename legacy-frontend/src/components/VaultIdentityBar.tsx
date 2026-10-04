@@ -67,7 +67,7 @@ export function VaultIdentityBar({
 
   return (
     <div className="console-identity">
-      <button type="button" onClick={onBack} className="flow-btn flow-btn--ghost console-back" aria-label="All vaults">
+      <button type="button" onClick={onBack} className="flow-btn flow-btn--ghost console-back" aria-label="All vaults" title="All vaults">
         <span aria-hidden="true">←</span>
       </button>
 
@@ -133,6 +133,7 @@ export function VaultIdentityBar({
                 type="button"
                 onClick={copyAddress}
                 title="Copy vault contract address"
+                aria-live="polite"
                 className="font-data"
                 style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--text-secondary)", fontSize: "0.6875rem" }}
               >

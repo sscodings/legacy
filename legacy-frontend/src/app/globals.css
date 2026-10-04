@@ -664,7 +664,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 
 .hero-giant-title {
   font-family: 'Murs Gothic', var(--font-murs-gothic), sans-serif;
-  font-size: clamp(2rem, 9.2vw, 8.5rem);
+  /* Also capped by viewport height so the headline and both CTAs stay above the fold on laptops */
+  font-size: clamp(2rem, min(9.2vw, 14.5vh), 8.5rem);
   font-weight: 900;
   line-height: 0.95;
   letter-spacing: -0.02em;
@@ -1310,8 +1311,8 @@ w3m-modal, appkit-modal {
 
 .console-card {
   background: #0e0f11;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0; /* structural panels stay machined, matching the lookup / landing panels */
 }
 
 .status-card {
@@ -1422,7 +1423,10 @@ w3m-modal, appkit-modal {
   color: var(--text-primary);
 }
 
+.status-timing-edit:hover { color: var(--accent-brass-hover); }
+
 .status-timing-edit {
+  color: var(--accent-brass);
   background: none;
   border: none;
   padding: 0;
@@ -1437,7 +1441,7 @@ w3m-modal, appkit-modal {
   justify-content: space-between;
   gap: 16px;
   padding: 16px 20px;
-  border-radius: 14px;
+  border-radius: 0;
   border: 1px solid;
 }
 
@@ -1490,7 +1494,8 @@ w3m-modal, appkit-modal {
 
 .console-tabs .dashboard-tab { margin-right: 0; padding: 16px 16px; }
 
-.console-tabpanel { padding: 28px; }
+/* min-height keeps the page from jumping when a short tab replaces a tall one */
+.console-tabpanel { padding: 28px; min-height: 380px; }
 
 /* Tab panels each carry their own heading; keep them quiet — the tab already names the section */
 .console-tabpanel h3 {
@@ -1527,7 +1532,7 @@ w3m-modal, appkit-modal {
 
 .setting-list {
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -1558,7 +1563,7 @@ w3m-modal, appkit-modal {
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%239A9E98' stroke-width='1.5'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E")
     no-repeat right 12px center;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: 0;
   cursor: pointer;
 }
 
@@ -1569,7 +1574,7 @@ w3m-modal, appkit-modal {
   display: inline-flex;
   padding: 3px;
   gap: 2px;
-  border-radius: 10px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.05);
 }
 
@@ -1607,7 +1612,7 @@ w3m-modal, appkit-modal {
 
 .panel-note {
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: 0;
   font-size: 0.8125rem;
   line-height: 1.5;
   color: var(--text-primary);
@@ -1620,7 +1625,7 @@ w3m-modal, appkit-modal {
 
 .panel-summary {
   padding: 14px 18px;
-  border-radius: 12px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.03);
   font-size: 0.875rem;
   line-height: 1.6;
@@ -1632,7 +1637,7 @@ w3m-modal, appkit-modal {
 .panel-empty {
   padding: 28px 24px;
   border: 1px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1875,7 +1880,7 @@ w3m-modal, appkit-modal {
   max-width: 420px;
   background-color: #0e0f11;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
+  border-radius: 0;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
   display: flex;
   flex-direction: column;
@@ -2028,7 +2033,7 @@ w3m-modal, appkit-modal {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: 0;
   outline: none;
   transition: border-color 150ms ease, background-color 150ms ease;
 }
@@ -2078,7 +2083,7 @@ w3m-modal, appkit-modal {
   color: #000000;
   background: #ffffff;
   border: 1px solid #ffffff;
-  border-radius: 10px;
+  border-radius: 0;
   cursor: pointer;
   white-space: nowrap;
   transition: opacity 150ms ease, background-color 150ms ease, transform var(--dur-1) var(--ease-out-quad);
@@ -2091,7 +2096,7 @@ w3m-modal, appkit-modal {
 .flow-btn--ghost {
   color: #ffffff;
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .flow-btn--ghost:hover:not(:disabled) {
@@ -2125,3 +2130,52 @@ w3m-modal, appkit-modal {
 
 
 
+
+
+/* ─── Accessibility: skip link ────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 300;
+  padding: 10px 16px;
+  background: #ffffff;
+  color: #000000;
+  font-family: var(--font-murs-gothic), sans-serif;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform var(--dur-2) var(--ease-out-quart);
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* ─── Status pages (404 / error) ──────────────────────────────────── */
+.status-page {
+  min-height: calc(100vh - var(--header-height, 64px));
+  display: flex;
+  align-items: center;
+  padding: 48px 24px 96px;
+}
+.status-page-inner {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.status-page-code {
+  font-family: var(--font-data);
+  font-size: 0.8125rem;
+  letter-spacing: 0.12em;
+  color: var(--accent-brass);
+  margin-bottom: 16px;
+}
+.status-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}

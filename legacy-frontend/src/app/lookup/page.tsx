@@ -90,20 +90,56 @@ export default function TransparencyLookup() {
   const trimmedInput = searchInput.trim();
   const inputIsValid = isAddress(trimmedInput);
 
+  // Keep the address bar in sync so a result can be bookmarked or shared as-is
+  const syncUrl = (addr: string | null) => {
+    try {
+      const url = new URL(window.location.href);
+      if (addr) url.searchParams.set("v", addr);
+      else url.searchParams.delete("v");
+      window.history.replaceState(null, "", url);
+    } catch {}
+  };
+
+  const runLookup = (addr: `0x${string}`) => {
+    setQueriedAddress(addr);
+    syncUrl(addr);
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputIsValid) return;
-    setQueriedAddress(trimmedInput as `0x${string}`);
+    runLookup(trimmedInput as `0x${string}`);
+  };
+
+  // Pasting a complete address is the whole intent — skip the extra click
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData("text").trim();
+    if (!isAddress(pasted)) return;
+    e.preventDefault();
+    setSearchInput(pasted);
+    runLookup(pasted as `0x${string}`);
   };
 
   const handleQuickLoadSmoke = () => {
     setSearchInput(CONTRACT_ADDRESSES.smokeVault);
-    setQueriedAddress(CONTRACT_ADDRESSES.smokeVault);
+    runLookup(CONTRACT_ADDRESSES.smokeVault);
+  };
+
+  const [linkCopied, setLinkCopied] = useState(false);
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1800);
+    } catch {}
   };
 
   const handleReset = () => {
     setSearchInput("");
     setQueriedAddress(null);
+    setLinkCopied(false);
+    syncUrl(null);
+    document.getElementById("vault-lookup-input")?.focus();
   };
 
   // ── Reads ─────────────────────────────────────────────────────────
@@ -228,6 +264,7 @@ export default function TransparencyLookup() {
                 placeholder="Vault address (0x…)"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
+                onPaste={handlePaste}
                 style={{
                   flex: "1 1 320px",
                   fontSize: "0.875rem",
@@ -429,6 +466,15 @@ export default function TransparencyLookup() {
                   style={{ marginTop: 0 }}
                 >
                   <span>NEW LOOKUP</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="btn-hero-action btn-hero-action--ghost"
+                  style={{ marginTop: 0 }}
+                  aria-live="polite"
+                >
+                  <span>{linkCopied ? "LINK COPIED" : "COPY LINK"}</span>
                 </button>
               </div>
             </div>
