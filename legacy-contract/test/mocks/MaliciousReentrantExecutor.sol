@@ -84,7 +84,7 @@ contract MaliciousReentrantExecutor is IVaultExecutor {
         } else if (attackTarget == ReentrancyTarget.CheckIn) {
             // Attempt to reenter checkIn
             uint256[8] memory proof;
-            try vault.checkIn(1, 42, proof) {
+            try vault.checkIn(abi.encode(1, 42, proof)) {
                 attackSucceeded = true;
             } catch (bytes memory reason) {
                 revertReason = reason;

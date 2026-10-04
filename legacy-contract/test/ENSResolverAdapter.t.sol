@@ -110,7 +110,7 @@ contract ENSResolverAdapterTest is Test {
         uint256[8] memory dummyProof = [uint256(0), 0, 0, 0, 0, 0, 0, 0];
 
         vm.prank(owner);
-        vault.registerLiveness(dummyRoot, dummyNullifier, dummyProof);
+        vault.registerLiveness(abi.encode(dummyRoot, dummyNullifier, dummyProof));
 
         // 3. Setup ENS domain and adapter pointing to the genuine vault
         bytes32 vitalikNode = keccak256(abi.encodePacked("vitalik.eth"));

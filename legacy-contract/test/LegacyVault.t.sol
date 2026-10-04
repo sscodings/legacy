@@ -45,7 +45,7 @@ contract LegacyVaultTest is Test {
         vault = LegacyVault(factory.createVault(verifierAdapter, CHECK_IN_INTERVAL, GRACE_PERIOD, CONTESTABLE_WINDOW));
 
         vm.prank(owner);
-        vault.registerLiveness(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vault.registerLiveness(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
 
         vm.prank(owner);
         vault.addHeir(heir);
@@ -59,7 +59,7 @@ contract LegacyVaultTest is Test {
 
     function _checkIn() internal {
         vm.prank(owner);
-        vault.checkIn(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vault.checkIn(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
     }
 
     function _warpToRed() internal {
@@ -120,7 +120,7 @@ contract LegacyVaultTest is Test {
     function test_RevertWhen_NonOwnerCallsCheckIn() public {
         vm.prank(address(0xBEEF));
         vm.expectRevert(LegacyVault.NotOwner.selector);
-        vault.checkIn(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vault.checkIn(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
     }
 
     function test_UpdateParametersSucceedsWhileGreen() public {
@@ -171,26 +171,26 @@ contract LegacyVaultTest is Test {
 
         vm.prank(owner);
         vm.expectRevert(LegacyVault.LivenessNotRegistered.selector);
-        freshVault.checkIn(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        freshVault.checkIn(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
     }
 
     function test_RevertWhen_RegisterLivenessCalledTwice() public {
         vm.prank(owner);
         vm.expectRevert(LegacyVault.LivenessAlreadyRegistered.selector);
-        vault.registerLiveness(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vault.registerLiveness(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
     }
 
     function test_RevertWhen_CheckInWithWrongNullifier() public {
         vm.prank(owner);
         vm.expectRevert(WorldIDVerifierAdapter.NullifierMismatch.selector);
-        vault.checkIn(DUMMY_ROOT, 999, DUMMY_PROOF);
+        vault.checkIn(abi.encode(DUMMY_ROOT, 999, DUMMY_PROOF));
     }
 
     function test_RevertWhen_WorldIDProofInvalid() public {
         mockWorldId.setShouldRevert(true);
         vm.prank(owner);
         vm.expectRevert("MockWorldID: forced revert");
-        vault.checkIn(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vault.checkIn(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
     }
 
     function test_RevertWhen_CrossVaultProofReplayedOnDifferentVault() public {
@@ -209,12 +209,12 @@ contract LegacyVaultTest is Test {
 
         // Vault A checkIn succeeds because signalHash matches signalHashA
         vm.prank(owner);
-        vault.checkIn(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vault.checkIn(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
 
         // Registering liveness on Vault B with the same proof parameters reverts because signal hash doesn't match
         vm.prank(owner);
         vm.expectRevert("MockWorldID: invalid signal hash");
-        vaultB.registerLiveness(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vaultB.registerLiveness(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
     }
 
     function test_RevertWhen_InitializeWithSubMinimumParameters() public {

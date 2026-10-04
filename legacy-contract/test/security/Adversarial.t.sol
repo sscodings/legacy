@@ -48,7 +48,7 @@ contract AdversarialTest is Test {
         vault = LegacyVault(factory.createVault(verifierAdapter, CHECK_IN_INTERVAL, GRACE_PERIOD, CONTESTABLE_WINDOW));
 
         vm.prank(owner);
-        vault.registerLiveness(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vault.registerLiveness(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
 
         vm.prank(owner);
         vault.addHeir(heir1);
@@ -65,7 +65,7 @@ contract AdversarialTest is Test {
 
     function _checkIn() internal {
         vm.prank(owner);
-        vault.checkIn(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vault.checkIn(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
     }
 
     function _warpToRed() internal {
@@ -609,5 +609,51 @@ contract AdversarialTest is Test {
         vm.prank(owner);
         vm.expectRevert(LegacyVault.HeirChangesLocked.selector);
         vault.removeHeir(heir1);
+    }
+
+    // ---------------------------------------------------------------------
+    // Liveness binding cannot be hijacked through the shared verifier
+    // ---------------------------------------------------------------------
+
+    /// @notice Regression: the World ID adapter used to take the vault address as a
+    ///         parameter with no access control. One adapter serves every vault, so
+    ///         anyone holding a World ID could bind their own nullifier to a vault
+    ///         whose owner had not registered yet. The owner's registration then
+    ///         reverted forever, every check-in failed — including the one that
+    ///         contests a claim — and the vault drifted to Red with the owner alive.
+    function test_AttackerCannotBindNullifierToAnotherOwnersVault() public {
+        vm.prank(owner);
+        LegacyVault fresh =
+            LegacyVault(factory.createVault(verifierAdapter, CHECK_IN_INTERVAL, GRACE_PERIOD, CONTESTABLE_WINDOW));
+
+        // The attacker races the owner straight to the shared adapter.
+        uint256 attackerNullifier = 666;
+        vm.prank(attacker);
+        verifierAdapter.registerCredential(owner, bytes32(0), abi.encode(DUMMY_ROOT, attackerNullifier, DUMMY_PROOF));
+
+        // The binding can only ever land on the caller's own address...
+        assertEq(verifierAdapter.vaultNullifier(attacker), attackerNullifier);
+        assertEq(verifierAdapter.vaultNullifier(address(fresh)), 0);
+
+        // ...so the real owner registers and checks in as normal.
+        vm.prank(owner);
+        fresh.registerLiveness(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
+        assertEq(verifierAdapter.vaultNullifier(address(fresh)), DUMMY_NULLIFIER);
+
+        vm.warp(block.timestamp + 1 days);
+        vm.prank(owner);
+        fresh.checkIn(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
+        assertEq(fresh.lastCheckIn(), block.timestamp);
+    }
+
+    /// @notice Zero is the adapter's "unregistered" sentinel and must never become a binding.
+    function test_RevertWhen_RegisteringZeroNullifier() public {
+        vm.prank(owner);
+        LegacyVault fresh =
+            LegacyVault(factory.createVault(verifierAdapter, CHECK_IN_INTERVAL, GRACE_PERIOD, CONTESTABLE_WINDOW));
+
+        vm.prank(owner);
+        vm.expectRevert(WorldIDVerifierAdapter.InvalidNullifier.selector);
+        fresh.registerLiveness(abi.encode(DUMMY_ROOT, uint256(0), DUMMY_PROOF));
     }
 }

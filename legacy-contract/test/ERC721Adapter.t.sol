@@ -121,7 +121,7 @@ contract ERC721AdapterTest is Test {
         uint256[8] memory dummyProof = [uint256(0), 0, 0, 0, 0, 0, 0, 0];
 
         vm.prank(owner);
-        vault.registerLiveness(dummyRoot, dummyNullifier, dummyProof);
+        vault.registerLiveness(abi.encode(dummyRoot, dummyNullifier, dummyProof));
 
         uint256 realTokenId = 202;
         nft.mint(owner, realTokenId);

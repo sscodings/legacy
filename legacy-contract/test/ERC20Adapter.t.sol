@@ -133,7 +133,7 @@ contract ERC20AdapterTest is Test {
         uint256[8] memory dummyProof = [uint256(0), 0, 0, 0, 0, 0, 0, 0];
 
         vm.prank(owner);
-        vault.registerLiveness(dummyRoot, dummyNullifier, dummyProof);
+        vault.registerLiveness(abi.encode(dummyRoot, dummyNullifier, dummyProof));
 
         uint256 vaultAmount = 2500 ether;
         ERC20Adapter genuineAdapter = new ERC20Adapter(address(token), vaultAmount, address(vault));
