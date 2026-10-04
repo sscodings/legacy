@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useAccount, useReadContract, useWriteContract, usePublicClient, useChainId, useSwitchChain } from "wagmi";
 import { useWalletModal } from "@/components/WalletModal";
@@ -19,6 +19,8 @@ import { CheckInModal } from "@/components/CheckInModal";
 import { HeirList } from "@/components/HeirList";
 import { GuardianList } from "@/components/GuardianList";
 import { AssetList, AssetRecord } from "@/components/AssetList";
+import { useAllocationHealth } from "@/hooks/useAllocationHealth";
+import { allocationErc20Abi, allocationErc721Abi } from "@/lib/allocations";
 import { VaultParameters } from "@/components/VaultParameters";
 import { WatchdogAlertPanel } from "@/components/WatchdogAlertPanel";
 import {
@@ -97,7 +99,9 @@ export default function VaultDashboardPage() {
   const [isSettling, setIsSettling] = useState(false);
   const [orchestratedMessage, setOrchestratedMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<VaultTab>("heirs");
-  const [assetList, setAssetList] = useState<AssetRecord[]>([]);
+  // Labels typed in for custom executors this session; on-chain allocations
+  // carry no label, and token/NFT labels are derived from the adapter instead.
+  const [customAssetLabels, setCustomAssetLabels] = useState<Record<string, string>>({});
 
   // Deployment state
   const [isCreatingVault, setIsCreatingVault] = useState(false);
@@ -258,6 +262,34 @@ export default function VaultDashboardPage() {
     functionName: "owner",
     query: { enabled: Boolean(selectedVault) },
   });
+
+  // Allocations are loaded from the chain, so they survive a page reload, and
+  // each one is checked live for whether it would actually pay out.
+  const {
+    allocations,
+    health: allocationHealth,
+    readiness: allocationReadiness,
+    isLoading: isLoadingAllocations,
+    refresh: refreshAllocations,
+    refreshHealth: refreshAllocationHealth,
+  } = useAllocationHealth(selectedVault ?? undefined, (vaultOwner as `0x${string}` | undefined) ?? address);
+
+  const assetList: AssetRecord[] = useMemo(
+    () =>
+      allocations.map((allocation) => ({
+        assetId: allocation.assetId,
+        label:
+          allocation.asset.kind === "OTHER"
+            ? customAssetLabels[allocation.assetId] ?? allocation.label
+            : allocation.label,
+        assetType: allocation.asset.kind === "OTHER" ? "CUSTOM" : allocation.asset.kind,
+        heir: allocation.heir,
+        executor: allocation.executor,
+        executed: allocation.executed,
+        allocation,
+      })),
+    [allocations, customAssetLabels]
+  );
 
   const { data: vaultVerifier, refetch: refetchVerifier } = useReadContract({
     address: selectedVault ?? undefined,
@@ -669,7 +701,8 @@ export default function VaultDashboardPage() {
       console.log("⏳ [Vault] assignAsset tx broadcast:", hash);
       await publicClient.waitForTransactionReceipt({ hash });
       console.log("✅ [Vault] assignAsset confirmed on-chain");
-      setAssetList((prev) => [...prev, { assetId, label, assetType: "ERC20", heir, executor, executed: false }]);
+      setCustomAssetLabels((prev) => ({ ...prev, [assetId]: label }));
+      await refreshAllocations();
     } catch (err: unknown) {
       console.error("❌ [Vault] assignAsset error details:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -683,6 +716,37 @@ export default function VaultDashboardPage() {
       }
       throw err;
     }
+  };
+
+  const handleRestoreApproval = async (assetId: `0x${string}`) => {
+    const allocation = allocations.find((a) => a.assetId === assetId);
+    if (!publicClient || !allocation) throw new Error("Allocation unavailable");
+    const { asset, executor } = allocation;
+
+    // Approvals live on the token, not the vault, so this works in any vault status.
+    let hash: `0x${string}`;
+    if (asset.kind === "ERC20") {
+      hash = await writeContractAsync({
+        chainId: worldChainSepolia.id,
+        address: asset.token,
+        abi: allocationErc20Abi,
+        functionName: "approve",
+        args: [executor, asset.amount],
+      });
+    } else if (asset.kind === "ERC721") {
+      hash = await writeContractAsync({
+        chainId: worldChainSepolia.id,
+        address: asset.token,
+        abi: allocationErc721Abi,
+        functionName: "approve",
+        args: [executor, asset.tokenId],
+      });
+    } else {
+      throw new Error("This asset type has to be re-approved from its own app.");
+    }
+
+    await publicClient.waitForTransactionReceipt({ hash });
+    await refreshAllocationHealth();
   };
 
   const handleRemoveAsset = async (assetId: `0x${string}`) => {
@@ -713,7 +777,7 @@ export default function VaultDashboardPage() {
       console.log("⏳ [Vault] removeAsset tx broadcast:", hash);
       await publicClient.waitForTransactionReceipt({ hash });
       console.log("✅ [Vault] removeAsset confirmed on-chain");
-      setAssetList((prev) => prev.filter((a) => a.assetId !== assetId));
+      await refreshAllocations();
     } catch (err: unknown) {
       console.error("❌ [Vault] removeAsset error details:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -1172,6 +1236,10 @@ export default function VaultDashboardPage() {
                       onAssignAsset={handleAssignAsset}
                       onRemoveAsset={handleRemoveAsset}
                       vaultAddress={selectedVault}
+                      health={allocationHealth}
+                      readiness={allocationReadiness}
+                      isCheckingHealth={isLoadingAllocations}
+                      onRestoreApproval={handleRestoreApproval}
                     />
                   )}
 

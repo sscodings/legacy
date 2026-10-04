@@ -21,14 +21,18 @@ import { VaultStatus, worldChainSepolia } from "@/lib/constants";
 import { ERC20ABI, ERC20AdapterABI, ERC20AdapterBytecode } from "@/lib/contracts/adapters";
 import { AddressChip } from "./AddressChip";
 import { Skeleton } from "./Skeleton";
+import { AllocationHealthBadge, AllocationReadinessBanner } from "./AllocationHealth";
+import type { AllocationHealthMap, AllocationReadiness, VaultAllocation } from "@/lib/allocations";
 
 export interface AssetRecord {
   assetId: `0x${string}`;
   label: string;
-  assetType: "ERC20" | "ERC721" | "ENS";
+  assetType: "ERC20" | "ERC721" | "ENS" | "CUSTOM";
   heir: `0x${string}`;
   executor: `0x${string}`;
   executed: boolean;
+  /** The on-chain allocation this row was loaded from, used for health checks. */
+  allocation?: VaultAllocation;
 }
 
 interface AssetListProps {
@@ -43,6 +47,12 @@ interface AssetListProps {
   ) => Promise<void>;
   onRemoveAsset: (assetId: `0x${string}`) => Promise<void>;
   vaultAddress?: `0x${string}`;
+  /** Live "would this pay out today?" state per allocation. */
+  health?: AllocationHealthMap;
+  readiness?: AllocationReadiness;
+  isCheckingHealth?: boolean;
+  /** Re-grants the executor's approval for an allocation that lost it. */
+  onRestoreApproval?: (assetId: `0x${string}`) => Promise<void>;
 }
 
 export interface TokenItem {
@@ -80,6 +90,10 @@ export function AssetList({
   onAssignAsset,
   onRemoveAsset,
   vaultAddress,
+  health,
+  readiness,
+  isCheckingHealth,
+  onRestoreApproval,
 }: AssetListProps) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
@@ -142,6 +156,10 @@ export function AssetList({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [executionStage, setExecutionStage] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
+  // Errors from table actions (remove, re-approve), shown beside the table:
+  // `errorText` only renders inside the assignment dialog.
+  const [tableError, setTableError] = useState<string | null>(null);
+  const [restoringAssetId, setRestoringAssetId] = useState<`0x${string}` | null>(null);
 
   const isGreen = vaultStatus === VaultStatus.Green;
 
@@ -544,13 +562,27 @@ export function AssetList({
   const handleRemove = async (assetId: `0x${string}`) => {
     try {
       setIsSubmitting(true);
-      setErrorText(null);
+      setTableError(null);
       await onRemoveAsset(assetId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to remove asset";
-      setErrorText(msg);
+      setTableError(msg);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleRestoreApproval = async (assetId: `0x${string}`) => {
+    if (!onRestoreApproval) return;
+    try {
+      setRestoringAssetId(assetId);
+      setTableError(null);
+      await onRestoreApproval(assetId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to re-approve asset";
+      setTableError(msg);
+    } finally {
+      setRestoringAssetId(null);
     }
   };
 
@@ -657,6 +689,15 @@ export function AssetList({
           )}
         </div>
       ) : (
+        <div>
+          {readiness && (
+            <AllocationReadinessBanner readiness={readiness} perspective="owner" isLoading={isCheckingHealth} />
+          )}
+          {tableError && (
+            <p role="alert" style={{ color: "var(--status-red)", fontSize: "0.8125rem", margin: "0 0 12px" }}>
+              {tableError}
+            </p>
+          )}
         <div
           style={{
             border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -700,22 +741,32 @@ export function AssetList({
                     <AddressChip address={asset.executor} truncate badge="" size="sm" />
                   </td>
                   <td>
-                    <span
-                      style={{
-                        padding: "3px 8px",
-                        borderRadius: 0,
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        backgroundColor: asset.executed
-                          ? "rgba(154, 158, 152, 0.2)"
-                          : "rgba(184, 137, 74, 0.18)",
-                        color: asset.executed
-                          ? "var(--text-secondary)"
-                          : "var(--accent-brass)",
-                      }}
-                    >
-                      {asset.executed ? "Claimed" : "Assigned"}
-                    </span>
+                    {asset.allocation ? (
+                      <AllocationHealthBadge
+                        allocation={asset.allocation}
+                        health={health?.[asset.assetId]}
+                        perspective="owner"
+                        onRestoreApproval={onRestoreApproval ? () => handleRestoreApproval(asset.assetId) : undefined}
+                        isRestoring={restoringAssetId === asset.assetId}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: 0,
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          backgroundColor: asset.executed
+                            ? "rgba(154, 158, 152, 0.2)"
+                            : "rgba(184, 137, 74, 0.18)",
+                          color: asset.executed
+                            ? "var(--text-secondary)"
+                            : "var(--accent-brass)",
+                        }}
+                      >
+                        {asset.executed ? "Claimed" : "Assigned"}
+                      </span>
+                    )}
                   </td>
                   {isGreen && (
                     <td style={{ textAlign: "right" }}>
@@ -740,6 +791,7 @@ export function AssetList({
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 

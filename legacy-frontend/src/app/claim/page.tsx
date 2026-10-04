@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { getAbiItem, isAddress } from "viem";
+import { isAddress } from "viem";
 import { useAccount, useReadContract, useWriteContract, usePublicClient, useChainId, useSwitchChain } from "wagmi";
 import { useWalletModal } from "@/components/WalletModal";
 import { VaultStatus, ClaimStatus, CONTRACT_ADDRESSES, worldChainSepolia, shortAddress, humanDuration } from "@/lib/constants";
@@ -14,14 +14,8 @@ import { useMounted } from "@/hooks/useMounted";
 import { StatusLamp } from "@/components/StatusLamp";
 import { SealedMessageHeirPanel } from "@/components/SealedMessageHeirPanel";
 import { GuardianAttestationPanel } from "@/components/GuardianAttestationPanel";
-
-interface HeirAllocation {
-  assetId: `0x${string}`;
-  executor: `0x${string}`;
-  executed: boolean;
-}
-
-const assetAssignedEvent = getAbiItem({ abi: LegacyVaultABI, name: "AssetAssigned" });
+import { AllocationHealthBadge, AllocationReadinessBanner } from "@/components/AllocationHealth";
+import { useAllocationHealth } from "@/hooks/useAllocationHealth";
 
 export default function HeirClaimPortal() {
   const mounted = useMounted();
@@ -153,59 +147,21 @@ export default function HeirClaimPortal() {
   }, [vaultAddress]);
   const ownerDisplay = vaultMeta?.ownerName ?? (vaultOwnerRaw ? shortAddress(String(vaultOwnerRaw)) : "Unknown");
 
-  // ── Heir's real on-chain allocations (assetId is a keccak256 hash,
-  // never guessable — discovered via AssetAssigned logs, not hardcoded) ──
-  const [heirAllocations, setHeirAllocations] = useState<HeirAllocation[]>([]);
-  const [isLoadingAllocations, setIsLoadingAllocations] = useState(false);
-
-  const refetchAllocations = useCallback(async () => {
-    if (!publicClient || !vaultAddress || !address || !assetAssignedEvent) return;
-    try {
-      setIsLoadingAllocations(true);
-      const logs = await publicClient.getLogs({
-        address: vaultAddress,
-        event: assetAssignedEvent,
-        args: { heir: address },
-        fromBlock: 0n,
-        toBlock: "latest",
-      });
-
-      const assetIds = Array.from(
-        new Set(logs.map((log) => log.args.assetId).filter((id): id is `0x${string}` => Boolean(id)))
-      );
-
-      const results = await Promise.all(
-        assetIds.map(async (assetId) => {
-          const alloc = await publicClient.readContract({
-            address: vaultAddress,
-            abi: LegacyVaultABI,
-            functionName: "allocations",
-            args: [assetId],
-          });
-          // allocations() returns [heir, executor, assetId, exists, executed]
-          const [, executor, , exists, executed] = alloc as unknown as [
-            `0x${string}`,
-            `0x${string}`,
-            `0x${string}`,
-            boolean,
-            boolean
-          ];
-          return exists ? { assetId, executor, executed } : null;
-        })
-      );
-
-      setHeirAllocations(results.filter((r): r is HeirAllocation => r !== null));
-    } catch (err) {
-      console.error("❌ [Claim] Failed to load heir allocations:", err);
-    } finally {
-      setIsLoadingAllocations(false);
-    }
-  }, [publicClient, vaultAddress, address]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch of on-chain logs, not a sync setState
-    refetchAllocations();
-  }, [refetchAllocations]);
+  // ── Heir's on-chain allocations (assetId is a keccak256 hash, never
+  // guessable — discovered via AssetAssigned logs), each checked live for
+  // whether it would actually pay out. Only loaded once a wallet is
+  // connected, so visitors never see other heirs' allocations. ──
+  const {
+    allocations: heirAllocations,
+    health: allocationHealth,
+    readiness: allocationReadiness,
+    isLoading: isLoadingAllocations,
+    refresh: refetchAllocations,
+  } = useAllocationHealth(
+    address && vaultAddress ? vaultAddress : undefined,
+    vaultOwnerRaw as `0x${string}` | undefined,
+    { heir: address }
+  );
 
   // ── Derived state ─────────────────────────────────────────────────
   const vaultStatus =
@@ -602,16 +558,16 @@ export default function HeirClaimPortal() {
                       <div className="panel-empty">No assets are currently assigned to your wallet.</div>
                     ) : (
                       <div className="setting-list">
+                        <AllocationReadinessBanner readiness={allocationReadiness} perspective="heir" />
                         {heirAllocations.map((alloc) => (
                           <div key={alloc.assetId} className="setting-row">
                             <div className="setting-label">
-                              <strong className="font-data" style={{ fontWeight: 600 }}>
-                                {alloc.assetId.slice(0, 10)}…{alloc.assetId.slice(-8)}
-                              </strong>
-                              <span className="font-data">
-                                {alloc.executor.slice(0, 8)}…{alloc.executor.slice(-6)}
-                                {alloc.executed ? " · transferred" : ""}
-                              </span>
+                              <strong style={{ fontWeight: 600 }}>{alloc.label}</strong>
+                              <AllocationHealthBadge
+                                allocation={alloc}
+                                health={allocationHealth[alloc.assetId]}
+                                perspective="heir"
+                              />
                             </div>
                             <button
                               type="button"
@@ -650,6 +606,50 @@ export default function HeirClaimPortal() {
                 )}
               </div>
             </section>
+
+            {/* What this heir is set to receive, and whether it is still backed.
+                Shown before any claim so an heir can verify their inheritance
+                is funded while the owner is alive; once a claim is finalized
+                the transfer list above takes over. */}
+            {isHeir && claimStatus !== ClaimStatus.Claimed && (isLoadingAllocations || heirAllocations.length > 0) && (
+              <section className="console-card">
+                <div className="console-tabpanel panel-stack">
+                  <div>
+                    <h3 className="panel-title" style={{ fontSize: "1.25rem" }}>
+                      What you&apos;re set to receive
+                    </h3>
+                    <p className="panel-lead">
+                      Assets stay in the owner&apos;s wallet until a claim completes. Each one is checked live.
+                    </p>
+                  </div>
+                  {isLoadingAllocations && heirAllocations.length === 0 ? (
+                    <div className="skeleton-shimmer" style={{ width: "100%", height: 80 }} />
+                  ) : (
+                    <>
+                      <AllocationReadinessBanner
+                        readiness={allocationReadiness}
+                        perspective="heir"
+                        isLoading={isLoadingAllocations}
+                      />
+                      <div className="setting-list">
+                        {heirAllocations.map((alloc) => (
+                          <div key={alloc.assetId} className="setting-row">
+                            <div className="setting-label">
+                              <strong style={{ fontWeight: 600 }}>{alloc.label}</strong>
+                            </div>
+                            <AllocationHealthBadge
+                              allocation={alloc}
+                              health={allocationHealth[alloc.assetId]}
+                              perspective="heir"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </section>
+            )}
 
             {/* Guardian death-attestation vote (accelerates inheritance). */}
             <GuardianAttestationPanel vaultAddress={vaultAddress} viewerAddress={address} />
