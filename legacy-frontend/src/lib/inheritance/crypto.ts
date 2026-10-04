@@ -11,8 +11,11 @@
 
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { x25519 } from "@noble/curves/ed25519";
+import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex, hexToBytes, randomBytes, utf8ToBytes } from "@noble/hashes/utils";
+
+export type KeyScheme = "wallet-signature" | "passkey-prf";
 
 export interface SealedBundle {
   /** ephemeral X25519 public key (hex) */
@@ -26,6 +29,7 @@ export interface SealedBundle {
 /**
  * The canonical message the heir signs to derive their key. Deterministic in
  * (vault, heir) so the heir re-derives the same key on every unseal.
+ * NOTE: This derivation is now CLIENT-SIDE ONLY. The signature must NEVER be sent to the server.
  */
 export function buildDeriveMessage(vault: string, heir: string): string {
   return [
@@ -37,6 +41,57 @@ export function buildDeriveMessage(vault: string, heir: string): string {
     "This request is gasless and only proves control of your wallet.",
     "Signing the same request again always yields the same key.",
   ].join("\n");
+}
+
+/**
+ * Signature binding message signed by the heir's wallet to authorize enrolling a public key.
+ * Contains only the public key, scheme, vault, heir, and timestamp.
+ */
+export function buildEnrollProofMessage(params: {
+  vault: string;
+  heir: string;
+  heirPublicKey: string;
+  scheme: KeyScheme;
+  issuedAt: number;
+}): string {
+  return [
+    "Legacy Protocol — Enroll Heir Decryption Key",
+    `Vault: ${params.vault.toLowerCase()}`,
+    `Heir: ${params.heir.toLowerCase()}`,
+    `Key Scheme: ${params.scheme}`,
+    `Public Key: ${params.heirPublicKey.toLowerCase()}`,
+    `Issued At: ${params.issuedAt}`,
+    "",
+    "Sign to bind this encryption key to your heir address.",
+    "This does not expose your private key and requires no gas.",
+  ].join("\n");
+}
+
+/**
+ * Stable PRF salt for a given vault and heir pair.
+ */
+export function buildPrfSalt(vault: string, heir: string): Uint8Array {
+  return sha256(utf8ToBytes(`legacy:v1:prf-salt:${vault.toLowerCase()}:${heir.toLowerCase()}`));
+}
+
+/**
+ * Derive 32-byte X25519 private key from WebAuthn PRF output using HKDF-SHA256.
+ */
+export function derivePrivateKeyFromPrf(
+  prfOutput: Uint8Array,
+  vault: string,
+  heir: string
+): Uint8Array {
+  const salt = buildPrfSalt(vault, heir);
+  const info = utf8ToBytes("legacy:v1:passkey-encryption-key");
+  return hkdf(sha256, prfOutput, salt, info, 32);
+}
+
+/**
+ * Compute the hex-encoded X25519 public key corresponding to a private key.
+ */
+export function publicKeyFromPrivate(priv: Uint8Array): string {
+  return bytesToHex(x25519.getPublicKey(priv));
 }
 
 /**
@@ -57,14 +112,20 @@ function signatureToBytes(signature: string): Uint8Array {
   return hexToBytes(h);
 }
 
-/** Derive the 32-byte X25519 private key from a wallet signature. */
+/**
+ * Derive the 32-byte X25519 private key from a wallet signature.
+ * NOTE: Client-side only! The signature must never be sent to the server.
+ */
 export function derivePrivateKey(signature: string): Uint8Array {
   return sha256(signatureToBytes(signature));
 }
 
-/** Derive the heir's X25519 public key (hex) from their signature. */
+/**
+ * Derive the heir's X25519 public key (hex) from their signature.
+ * NOTE: Client-side only!
+ */
 export function publicKeyFromSignature(signature: string): string {
-  return bytesToHex(x25519.getPublicKey(derivePrivateKey(signature)));
+  return publicKeyFromPrivate(derivePrivateKey(signature));
 }
 
 /** Owner-side: encrypt arbitrary bytes to the heir's published public key. */
