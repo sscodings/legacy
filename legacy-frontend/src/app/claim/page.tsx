@@ -14,11 +14,17 @@ import { useMounted } from "@/hooks/useMounted";
 import { StatusLamp } from "@/components/StatusLamp";
 import { SealedMessageHeirPanel } from "@/components/SealedMessageHeirPanel";
 import { GuardianAttestationPanel } from "@/components/GuardianAttestationPanel";
+import {
+  assessAllocations,
+  getHealthReasonMessage,
+  type AllocationHealth,
+} from "@/lib/health/allocation-health";
 
 interface HeirAllocation {
   assetId: `0x${string}`;
   executor: `0x${string}`;
   executed: boolean;
+  health?: AllocationHealth;
 }
 
 const assetAssignedEvent = getAbiItem({ abi: LegacyVaultABI, name: "AssetAssigned" });
@@ -194,13 +200,52 @@ export default function HeirClaimPortal() {
         })
       );
 
-      setHeirAllocations(results.filter((r): r is HeirAllocation => r !== null));
+      const validAllocations = results.filter((r): r is HeirAllocation => r !== null);
+
+      let ownerAddr = vaultOwnerRaw as `0x${string}` | undefined;
+      if (!ownerAddr && vaultAddress) {
+        try {
+          ownerAddr = (await publicClient.readContract({
+            address: vaultAddress,
+            abi: LegacyVaultABI,
+            functionName: "owner",
+          })) as `0x${string}`;
+        } catch {}
+      }
+
+      if (ownerAddr && validAllocations.length > 0) {
+        try {
+          const healthResults = await assessAllocations(
+            publicClient,
+            vaultAddress,
+            ownerAddr,
+            validAllocations.map((a) => ({
+              assetId: a.assetId,
+              heir: address,
+              executor: a.executor,
+              executed: a.executed,
+            }))
+          );
+          const healthMap = new Map(healthResults.map((h) => [h.assetId.toLowerCase(), h]));
+          setHeirAllocations(
+            validAllocations.map((a) => ({
+              ...a,
+              health: healthMap.get(a.assetId.toLowerCase()),
+            }))
+          );
+          return;
+        } catch (healthErr) {
+          console.warn("[Claim] Failed to assess allocation health:", healthErr);
+        }
+      }
+
+      setHeirAllocations(validAllocations);
     } catch (err) {
       console.error("❌ [Claim] Failed to load heir allocations:", err);
     } finally {
       setIsLoadingAllocations(false);
     }
-  }, [publicClient, vaultAddress, address]);
+  }, [publicClient, vaultAddress, address, vaultOwnerRaw]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch of on-chain logs, not a sync setState
@@ -605,13 +650,33 @@ export default function HeirClaimPortal() {
                         {heirAllocations.map((alloc) => (
                           <div key={alloc.assetId} className="setting-row">
                             <div className="setting-label">
-                              <strong className="font-data" style={{ fontWeight: 600 }}>
-                                {alloc.assetId.slice(0, 10)}…{alloc.assetId.slice(-8)}
-                              </strong>
-                              <span className="font-data">
-                                {alloc.executor.slice(0, 8)}…{alloc.executor.slice(-6)}
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                <strong className="font-data" style={{ fontWeight: 600 }}>
+                                  {alloc.health?.label || `${alloc.assetId.slice(0, 10)}…${alloc.assetId.slice(-8)}`}
+                                </strong>
+                                {alloc.health?.state === "funded" ? (
+                                  <span className="status-badge badge-green" style={{ fontSize: "0.6875rem", padding: "2px 6px", borderRadius: 0 }}>
+                                    Funded
+                                  </span>
+                                ) : alloc.health?.state === "underfunded" ? (
+                                  <span className="status-badge badge-amber" style={{ fontSize: "0.6875rem", padding: "2px 6px", borderRadius: 0 }}>
+                                    Underfunded
+                                  </span>
+                                ) : !alloc.executed ? (
+                                  <span className="status-badge" style={{ fontSize: "0.6875rem", padding: "2px 6px", borderRadius: 0, background: "rgba(154, 158, 152, 0.15)", color: "var(--text-secondary)", border: "1px solid var(--border-hairline)" }}>
+                                    Couldn&apos;t verify
+                                  </span>
+                                ) : null}
+                              </div>
+                              <span className="font-data" style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                                Executor: {alloc.executor.slice(0, 8)}…{alloc.executor.slice(-6)}
                                 {alloc.executed ? " · transferred" : ""}
                               </span>
+                              {!alloc.executed && alloc.health && alloc.health.state === "underfunded" && (
+                                <span style={{ fontSize: "0.75rem", color: "var(--status-amber)", marginTop: "2px", lineHeight: 1.4 }}>
+                                  The owner&apos;s wallet doesn&apos;t currently cover this allocation ({getHealthReasonMessage(alloc.health.reason)}).
+                                </span>
+                              )}
                             </div>
                             <button
                               type="button"
@@ -637,6 +702,46 @@ export default function HeirClaimPortal() {
                         <h3 className="panel-title" style={{ fontSize: "1.25rem" }}>
                           Ready to claim
                         </h3>
+                        {isLoadingAllocations ? (
+                          <div className="skeleton-shimmer" style={{ width: "100%", height: 60, margin: "12px 0" }} />
+                        ) : heirAllocations.length > 0 && (
+                          <div style={{ width: "100%", margin: "14px 0", textAlign: "left" }}>
+                            <div className="setting-list">
+                              {heirAllocations.map((alloc) => (
+                                <div key={alloc.assetId} className="setting-row" style={{ padding: "10px 14px" }}>
+                                  <div className="setting-label">
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                      <strong className="font-data" style={{ fontWeight: 600 }}>
+                                        {alloc.health?.label || `${alloc.assetId.slice(0, 10)}…${alloc.assetId.slice(-8)}`}
+                                      </strong>
+                                      {alloc.health?.state === "funded" ? (
+                                        <span className="status-badge badge-green" style={{ fontSize: "0.6875rem", padding: "2px 6px", borderRadius: 0 }}>
+                                          Funded
+                                        </span>
+                                      ) : alloc.health?.state === "underfunded" ? (
+                                        <span className="status-badge badge-amber" style={{ fontSize: "0.6875rem", padding: "2px 6px", borderRadius: 0 }}>
+                                          Underfunded
+                                        </span>
+                                      ) : (
+                                        <span className="status-badge" style={{ fontSize: "0.6875rem", padding: "2px 6px", borderRadius: 0, background: "rgba(154, 158, 152, 0.15)", color: "var(--text-secondary)", border: "1px solid var(--border-hairline)" }}>
+                                          Couldn&apos;t verify
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="font-data" style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                                      Executor: {alloc.executor.slice(0, 8)}…{alloc.executor.slice(-6)}
+                                    </span>
+                                    {alloc.health && alloc.health.state === "underfunded" && (
+                                      <span style={{ fontSize: "0.75rem", color: "var(--status-amber)", marginTop: "2px", lineHeight: 1.4 }}>
+                                        The owner&apos;s wallet doesn&apos;t currently cover this allocation ({getHealthReasonMessage(alloc.health.reason)}).
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <button type="button" onClick={handleInitiateClaim} disabled={isProcessing} className="flow-btn" id="initiate-claim-btn">
                           {isProcessing ? "Starting…" : "Start claim"}
                         </button>

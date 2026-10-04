@@ -4,10 +4,16 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { isAddress } from "viem";
-import { useReadContract } from "wagmi";
+import { useReadContract, usePublicClient } from "wagmi";
 import { VaultStatus, CONTRACT_ADDRESSES, shortAddress, humanDuration, timeAgo } from "@/lib/constants";
 import { fetchVaultMeta, type VaultMetaRecord } from "@/lib/vault-meta/client";
 import { LegacyVaultABI } from "@/lib/contracts/abis";
+import {
+  loadVaultAllocations,
+  assessAllocations,
+  summarizeHealth,
+  type HealthSummary,
+} from "@/lib/health/allocation-health";
 import { StatusLamp } from "@/components/StatusLamp";
 import { TransparencyLookupSkeleton } from "@/components/Skeleton";
 
@@ -75,6 +81,10 @@ export default function TransparencyLookup() {
   const [searchInput, setSearchInput] = useState<string>("");
   const [queriedAddress, setQueriedAddress] = useState<`0x${string}` | null>(null);
   const searchParams = useSearchParams();
+  const publicClient = usePublicClient();
+  const [healthSummary, setHealthSummary] = useState<HealthSummary | null>(null);
+  const [isHealthLoading, setIsHealthLoading] = useState(false);
+  const [healthFailed, setHealthFailed] = useState(false);
 
   // Shareable deep link (?v=0x...) — same convention as the claim page
   useEffect(() => {
@@ -138,6 +148,8 @@ export default function TransparencyLookup() {
     setSearchInput("");
     setQueriedAddress(null);
     setLinkCopied(false);
+    setHealthSummary(null);
+    setHealthFailed(false);
     syncUrl(null);
     document.getElementById("vault-lookup-input")?.focus();
   };
@@ -212,6 +224,48 @@ export default function TransparencyLookup() {
       setVaultMeta(null);
     };
   }, [queriedAddress]);
+
+  // Asset funding health summary for the looked-up vault
+  useEffect(() => {
+    if (!queriedAddress || !owner || !publicClient) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing stale health on deselect
+      setHealthSummary(null);
+      setHealthFailed(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsHealthLoading(true);
+    setHealthFailed(false);
+
+    (async () => {
+      try {
+        const allocations = await loadVaultAllocations(publicClient, queriedAddress);
+        const results = await assessAllocations(
+          publicClient,
+          queriedAddress,
+          owner as `0x${string}`,
+          allocations
+        );
+        if (!cancelled) {
+          setHealthSummary(summarizeHealth(results));
+        }
+      } catch (err) {
+        console.warn("[Lookup] Failed to assess vault asset health:", err);
+        if (!cancelled) {
+          setHealthFailed(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsHealthLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [queriedAddress, owner, publicClient]);
 
   // ── Derived ───────────────────────────────────────────────────────
   const vaultStatus = rawStatus !== undefined ? (Number(rawStatus) as VaultStatus) : null;
@@ -387,6 +441,78 @@ export default function TransparencyLookup() {
                   gracePeriod={gracePeriod}
                   livenessRegistered={Boolean(livenessRegistered)}
                 />
+              </div>
+
+              {/* Asset Funding Summary Card */}
+              <div
+                style={{
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  padding: "16px 24px",
+                  marginBottom: "20px",
+                  background: "rgba(255, 255, 255, 0.02)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "12px",
+                }}
+              >
+                <div>
+                  <span
+                    style={{
+                      fontSize: "0.6875rem",
+                      color: "var(--text-secondary)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                      display: "block",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Asset Health
+                  </span>
+                  <strong style={{ fontSize: "1.125rem", color: "#ffffff", fontWeight: 600 }}>
+                    {isHealthLoading ? (
+                      "Checking asset funding…"
+                    ) : healthFailed ? (
+                      "Couldn't verify"
+                    ) : healthSummary ? (
+                      healthSummary.total === 0 ? (
+                        "No assets allocated"
+                      ) : healthSummary.funded === healthSummary.total ? (
+                        `All ${healthSummary.total} assets funded`
+                      ) : (
+                        `${healthSummary.funded} of ${healthSummary.total} assets funded`
+                      )
+                    ) : (
+                      "—"
+                    )}
+                  </strong>
+                </div>
+                {!isHealthLoading && healthSummary && healthSummary.total > 0 && (
+                  <span
+                    className={`status-badge ${
+                      healthSummary.underfunded > 0
+                        ? "badge-amber"
+                        : healthSummary.unknown > 0
+                        ? ""
+                        : "badge-green"
+                    }`}
+                    style={{
+                      borderRadius: 0,
+                      padding: "4px 10px",
+                      fontSize: "0.75rem",
+                      ...(healthSummary.underfunded === 0 && healthSummary.unknown > 0
+                        ? { background: "rgba(154, 158, 152, 0.15)", color: "var(--text-secondary)", border: "1px solid var(--border-hairline)" }
+                        : {}),
+                    }}
+                  >
+                    {healthSummary.underfunded > 0
+                      ? `${healthSummary.underfunded} underfunded`
+                      : healthSummary.unknown > 0
+                      ? "Verification incomplete"
+                      : "Fully funded"}
+                  </span>
+                )}
               </div>
 
               {/* Facts, in plain language */}

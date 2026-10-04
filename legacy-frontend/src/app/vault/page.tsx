@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useAccount, useReadContract, useWriteContract, usePublicClient, useChainId, useSwitchChain } from "wagmi";
 import { useWalletModal } from "@/components/WalletModal";
@@ -8,6 +8,7 @@ import {
   CONTRACT_ADDRESSES,
   VaultStatus,
   worldChainSepolia,
+  shortAddress,
 } from "@/lib/constants";
 import { BaseError, ContractFunctionRevertedError, getAddress, isAddress, isAddressEqual } from "viem";
 import { LegacyVaultFactoryABI, LegacyVaultABI, WorldIDRevertErrorsABI } from "@/lib/contracts/abis";
@@ -19,6 +20,12 @@ import { CheckInModal } from "@/components/CheckInModal";
 import { HeirList } from "@/components/HeirList";
 import { GuardianList } from "@/components/GuardianList";
 import { AssetList, AssetRecord } from "@/components/AssetList";
+import {
+  loadVaultAllocations,
+  assessAllocations,
+  summarizeHealth,
+  type AllocationHealth,
+} from "@/lib/health/allocation-health";
 import { VaultParameters } from "@/components/VaultParameters";
 import { WatchdogAlertPanel } from "@/components/WatchdogAlertPanel";
 import {
@@ -98,6 +105,9 @@ export default function VaultDashboardPage() {
   const [orchestratedMessage, setOrchestratedMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<VaultTab>("heirs");
   const [assetList, setAssetList] = useState<AssetRecord[]>([]);
+  const sessionLabelsRef = useRef<Map<string, string>>(new Map());
+  const [isHealthLoading, setIsHealthLoading] = useState(false);
+  const isHealthFetchingRef = useRef(false);
 
   // Deployment state
   const [isCreatingVault, setIsCreatingVault] = useState(false);
@@ -324,6 +334,99 @@ export default function VaultDashboardPage() {
     }
     return ok;
   };
+
+  const refreshAssetsAndHealth = useCallback(async () => {
+    if (!publicClient || !selectedVault) {
+      setAssetList([]);
+      return;
+    }
+    if (isHealthFetchingRef.current) return;
+    isHealthFetchingRef.current = true;
+    setIsHealthLoading(true);
+
+    try {
+      const rawAllocations = await loadVaultAllocations(publicClient, selectedVault);
+      const ownerAddress = (vaultOwner as `0x${string}`) || address;
+      if (!ownerAddress) {
+        const fallbackRecords: AssetRecord[] = rawAllocations.map((a) => {
+          const sessionLabel = sessionLabelsRef.current.get(a.assetId.toLowerCase());
+          return {
+            assetId: a.assetId,
+            label: sessionLabel || `${shortAddress(a.executor)}`,
+            assetType: "UNKNOWN",
+            heir: a.heir,
+            executor: a.executor,
+            executed: a.executed,
+          };
+        });
+        setAssetList(fallbackRecords);
+        return;
+      }
+
+      const healthResults = await assessAllocations(
+        publicClient,
+        selectedVault,
+        ownerAddress,
+        rawAllocations
+      );
+
+      const records: AssetRecord[] = healthResults.map((h) => {
+        const sessionLabel = sessionLabelsRef.current.get(h.assetId.toLowerCase());
+        const label = sessionLabel || h.label || shortAddress(h.executor);
+        return {
+          assetId: h.assetId,
+          label,
+          assetType: h.kind === "ERC20" || h.kind === "ERC721" || h.kind === "ENS" ? h.kind : "UNKNOWN",
+          heir: h.heir,
+          executor: h.executor,
+          executed: h.executed,
+          health: h,
+        };
+      });
+
+      setAssetList(records);
+    } catch (err) {
+      console.warn("[Vault] Failed to refresh assets and health:", err);
+    } finally {
+      isHealthFetchingRef.current = false;
+      setIsHealthLoading(false);
+    }
+  }, [publicClient, selectedVault, vaultOwner, address]);
+
+  const healthSummary = useMemo(() => {
+    const healthItems = assetList
+      .map((a) => a.health)
+      .filter((h): h is AllocationHealth => Boolean(h));
+    return summarizeHealth(healthItems);
+  }, [assetList]);
+
+  useEffect(() => {
+    if (selectedVault) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch of on-chain logs, not a sync setState
+      refreshAssetsAndHealth();
+    } else {
+      setAssetList([]);
+    }
+  }, [selectedVault, address, refreshAssetsAndHealth]);
+
+  useEffect(() => {
+    if (activeTab === "assets" && selectedVault) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch of on-chain logs, not a sync setState
+      refreshAssetsAndHealth();
+    }
+  }, [activeTab, selectedVault, refreshAssetsAndHealth]);
+
+  useEffect(() => {
+    if (!selectedVault || activeTab !== "assets") return;
+
+    const intervalId = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        refreshAssetsAndHealth();
+      }
+    }, 60000);
+
+    return () => clearInterval(intervalId);
+  }, [selectedVault, activeTab, refreshAssetsAndHealth]);
 
   const refetchAll = useCallback(() => {
     refetchStatus();
@@ -669,7 +772,12 @@ export default function VaultDashboardPage() {
       console.log("⏳ [Vault] assignAsset tx broadcast:", hash);
       await publicClient.waitForTransactionReceipt({ hash });
       console.log("✅ [Vault] assignAsset confirmed on-chain");
-      setAssetList((prev) => [...prev, { assetId, label, assetType: "ERC20", heir, executor, executed: false }]);
+      sessionLabelsRef.current.set(assetId.toLowerCase(), label);
+      setAssetList((prev) => {
+        const filtered = prev.filter((a) => a.assetId.toLowerCase() !== assetId.toLowerCase());
+        return [...filtered, { assetId, label, assetType: "ERC20", heir, executor, executed: false }];
+      });
+      refreshAssetsAndHealth();
     } catch (err: unknown) {
       console.error("❌ [Vault] assignAsset error details:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -713,7 +821,9 @@ export default function VaultDashboardPage() {
       console.log("⏳ [Vault] removeAsset tx broadcast:", hash);
       await publicClient.waitForTransactionReceipt({ hash });
       console.log("✅ [Vault] removeAsset confirmed on-chain");
-      setAssetList((prev) => prev.filter((a) => a.assetId !== assetId));
+      sessionLabelsRef.current.delete(assetId.toLowerCase());
+      setAssetList((prev) => prev.filter((a) => a.assetId.toLowerCase() !== assetId.toLowerCase()));
+      refreshAssetsAndHealth();
     } catch (err: unknown) {
       console.error("❌ [Vault] removeAsset error details:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -1102,6 +1212,53 @@ export default function VaultDashboardPage() {
                   />
                 )}
 
+                {/* Health summary card directly below LivenessPanel */}
+                {assetList.length > 0 && healthSummary.total > 0 && (
+                  <div
+                    className={`console-alert ${
+                      healthSummary.underfunded > 0
+                        ? "console-alert--warning"
+                        : healthSummary.unknown > 0
+                        ? ""
+                        : "console-alert--success"
+                    }`}
+                    style={{
+                      marginTop: "16px",
+                      borderRadius: 0,
+                      ...(healthSummary.underfunded === 0 && healthSummary.unknown > 0
+                        ? { background: "rgba(255, 255, 255, 0.04)", borderColor: "rgba(255, 255, 255, 0.15)" }
+                        : {}),
+                    }}
+                  >
+                    <div className="console-alert-body">
+                      <strong>
+                        {healthSummary.underfunded === 0 && healthSummary.unknown === 0
+                          ? `All ${healthSummary.total} assets are funded`
+                          : `${healthSummary.funded} of ${healthSummary.total} assets will pay out`}
+                      </strong>
+                      <p>
+                        {healthSummary.underfunded > 0
+                          ? `${healthSummary.underfunded} ${
+                              healthSummary.underfunded === 1 ? "asset is" : "assets are"
+                            } underfunded and will fail if succession happens now.`
+                          : healthSummary.unknown > 0
+                          ? `Could not verify ${healthSummary.unknown} ${
+                              healthSummary.unknown === 1 ? "asset" : "assets"
+                            } right now.`
+                          : "Wallet balances and approvals cover every assigned inheritance asset."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => selectTab("assets")}
+                      className="flow-btn flow-btn--ghost"
+                      style={{ borderRadius: 0, whiteSpace: "nowrap" }}
+                    >
+                      View assets →
+                    </button>
+                  </div>
+                )}
+
                 <div className="console-card console-tabs-card">
                 {/* Main Focus Area: Underline Tabs */}
                 <div role="tablist" aria-label="Vault management sections" className="console-tabs">
@@ -1172,6 +1329,8 @@ export default function VaultDashboardPage() {
                       onAssignAsset={handleAssignAsset}
                       onRemoveAsset={handleRemoveAsset}
                       vaultAddress={selectedVault}
+                      isHealthLoading={isHealthLoading}
+                      onRecheckHealth={refreshAssetsAndHealth}
                     />
                   )}
 
