@@ -72,7 +72,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const record = await saveSealedBundle(body.vaultAddress, body.heirAddress, b, body.ownerAddress);
+    const record = await saveSealedBundle(
+      body.vaultAddress,
+      body.heirAddress,
+      b,
+      body.ownerAddress,
+      existing.heirPublicKey
+    );
     if (!record) {
       return NextResponse.json({ error: "Failed to store sealed message." }, { status: 500 });
     }

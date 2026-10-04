@@ -20,6 +20,10 @@ export interface ISealedInheritance extends Document {
   vaultAddress: string;
   heirAddress: string;
   heirPublicKey: string;
+  keyScheme?: "wallet-signature" | "passkey-prf";
+  credentialId?: string;
+  sealedForPublicKey?: string;
+  sealedVideoForPublicKey?: string;
   sealedBundle?: ISealedBundle;
   sealedBy?: string;
   sealedAt?: number;
@@ -56,6 +60,10 @@ const SealedInheritanceSchema = new Schema<ISealedInheritance>(
     vaultAddress: { type: String, required: true, lowercase: true, trim: true, index: true },
     heirAddress: { type: String, required: true, lowercase: true, trim: true, index: true },
     heirPublicKey: { type: String, required: true },
+    keyScheme: { type: String, enum: ["wallet-signature", "passkey-prf"], default: "wallet-signature" },
+    credentialId: { type: String },
+    sealedForPublicKey: { type: String },
+    sealedVideoForPublicKey: { type: String },
     sealedBundle: { type: SealedBundleSchema },
     sealedBy: { type: String, lowercase: true, trim: true },
     sealedAt: { type: Number },

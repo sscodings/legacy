@@ -24,8 +24,12 @@ export async function GET(request: Request) {
       return NextResponse.json({
         enrolled: false,
         heirPublicKey: null,
+        keyScheme: null,
+        credentialId: null,
         hasSealed: false,
         hasSealedVideo: false,
+        needsReseal: false,
+        needsResealVideo: false,
         canReveal: false,
         bundle: null,
         video: null,
@@ -34,6 +38,21 @@ export async function GET(request: Request) {
 
     const hasSealed = Boolean(record.sealedBundle);
     const hasSealedVideo = Boolean(record.sealedVideo);
+
+    // If the heir re-enrolled with a new public key (e.g. upgraded to passkey or rotated),
+    // existing sealed ciphertexts can no longer be decrypted with their current key.
+    const needsReseal = Boolean(
+      hasSealed &&
+      record.heirPublicKey &&
+      record.sealedForPublicKey &&
+      record.sealedForPublicKey.toLowerCase() !== record.heirPublicKey.toLowerCase()
+    );
+    const needsResealVideo = Boolean(
+      hasSealedVideo &&
+      record.heirPublicKey &&
+      record.sealedVideoForPublicKey &&
+      record.sealedVideoForPublicKey.toLowerCase() !== record.heirPublicKey.toLowerCase()
+    );
 
     // The sealed ciphertext (and the encrypted video's blob URL) is only
     // released once the vault has entered succession (Red). Both are
@@ -52,8 +71,12 @@ export async function GET(request: Request) {
     return NextResponse.json({
       enrolled: Boolean(record.heirPublicKey),
       heirPublicKey: record.heirPublicKey || null,
+      keyScheme: record.keyScheme || "wallet-signature",
+      credentialId: record.credentialId ?? null,
       hasSealed,
       hasSealedVideo,
+      needsReseal,
+      needsResealVideo,
       sealedAt: record.sealedAt ?? null,
       sealedVideoAt: record.sealedVideoAt ?? null,
       canReveal,

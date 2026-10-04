@@ -73,7 +73,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const record = await saveSealedVideo(body.vaultAddress, body.heirAddress, v, body.ownerAddress);
+    const record = await saveSealedVideo(
+      body.vaultAddress,
+      body.heirAddress,
+      v,
+      body.ownerAddress,
+      existing.heirPublicKey
+    );
     if (!record) {
       return NextResponse.json({ error: "Failed to store sealed video." }, { status: 500 });
     }

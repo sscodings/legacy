@@ -8,6 +8,10 @@ export interface SealedInheritanceRecord {
   vaultAddress: string;
   heirAddress: string;
   heirPublicKey: string;
+  keyScheme?: "wallet-signature" | "passkey-prf";
+  credentialId?: string;
+  sealedForPublicKey?: string;
+  sealedVideoForPublicKey?: string;
   sealedBundle?: SealedBundle;
   sealedBy?: string;
   sealedAt?: number;
@@ -66,6 +70,10 @@ function docToRecord(doc: ISealedInheritance): SealedInheritanceRecord {
     vaultAddress: doc.vaultAddress,
     heirAddress: doc.heirAddress,
     heirPublicKey: doc.heirPublicKey,
+    keyScheme: doc.keyScheme || "wallet-signature",
+    credentialId: doc.credentialId,
+    sealedForPublicKey: doc.sealedForPublicKey,
+    sealedVideoForPublicKey: doc.sealedVideoForPublicKey,
     sealedBundle: doc.sealedBundle
       ? { ephPub: doc.sealedBundle.ephPub, nonce: doc.sealedBundle.nonce, ct: doc.sealedBundle.ct }
       : undefined,
@@ -116,15 +124,21 @@ export async function getInheritance(
 export async function saveEnrollment(
   vault: string,
   heir: string,
-  heirPublicKey: string
+  heirPublicKey: string,
+  keyScheme: "wallet-signature" | "passkey-prf" = "wallet-signature",
+  credentialId?: string
 ): Promise<SealedInheritanceRecord> {
   const key = keyFor(vault, heir);
   try {
     const conn = await connectToDatabase();
     if (conn) {
+      const updateData: Record<string, unknown> = { heirPublicKey, keyScheme };
+      if (credentialId) {
+        updateData.credentialId = credentialId;
+      }
       const doc = await SealedInheritanceModel.findOneAndUpdate(
         { vaultAddress: vault.toLowerCase(), heirAddress: heir.toLowerCase() },
-        { $set: { heirPublicKey } },
+        { $set: updateData },
         { new: true, upsert: true }
       );
       const rec = docToRecord(doc);
@@ -141,9 +155,16 @@ export async function saveEnrollment(
     vaultAddress: vault.toLowerCase(),
     heirAddress: heir.toLowerCase(),
     heirPublicKey,
+    keyScheme,
+    credentialId: credentialId || existing?.credentialId,
+    sealedForPublicKey: existing?.sealedForPublicKey,
+    sealedVideoForPublicKey: existing?.sealedVideoForPublicKey,
     sealedBundle: existing?.sealedBundle,
     sealedBy: existing?.sealedBy,
     sealedAt: existing?.sealedAt,
+    sealedVideo: existing?.sealedVideo,
+    sealedVideoBy: existing?.sealedVideoBy,
+    sealedVideoAt: existing?.sealedVideoAt,
   };
   memoryCache.set(key, rec);
   persistToFile();
@@ -155,16 +176,25 @@ export async function saveSealedBundle(
   vault: string,
   heir: string,
   bundle: SealedBundle,
-  sealedBy: string
+  sealedBy: string,
+  sealedForPublicKey?: string
 ): Promise<SealedInheritanceRecord | null> {
   const key = keyFor(vault, heir);
   const sealedAt = Date.now();
   try {
     const conn = await connectToDatabase();
     if (conn) {
+      const updateData: Record<string, unknown> = {
+        sealedBundle: bundle,
+        sealedBy: sealedBy.toLowerCase(),
+        sealedAt,
+      };
+      if (sealedForPublicKey) {
+        updateData.sealedForPublicKey = sealedForPublicKey;
+      }
       const doc = await SealedInheritanceModel.findOneAndUpdate(
         { vaultAddress: vault.toLowerCase(), heirAddress: heir.toLowerCase() },
-        { $set: { sealedBundle: bundle, sealedBy: sealedBy.toLowerCase(), sealedAt } },
+        { $set: updateData },
         { new: true }
       );
       if (!doc) return null;
@@ -184,6 +214,7 @@ export async function saveSealedBundle(
     sealedBundle: bundle,
     sealedBy: sealedBy.toLowerCase(),
     sealedAt,
+    sealedForPublicKey: sealedForPublicKey || existing.sealedForPublicKey,
   };
   memoryCache.set(key, rec);
   persistToFile();
@@ -196,16 +227,25 @@ export async function saveSealedVideo(
   vault: string,
   heir: string,
   video: SealedVideoMeta,
-  sealedBy: string
+  sealedBy: string,
+  sealedVideoForPublicKey?: string
 ): Promise<SealedInheritanceRecord | null> {
   const key = keyFor(vault, heir);
   const sealedVideoAt = Date.now();
   try {
     const conn = await connectToDatabase();
     if (conn) {
+      const updateData: Record<string, unknown> = {
+        sealedVideo: video,
+        sealedVideoBy: sealedBy.toLowerCase(),
+        sealedVideoAt,
+      };
+      if (sealedVideoForPublicKey) {
+        updateData.sealedVideoForPublicKey = sealedVideoForPublicKey;
+      }
       const doc = await SealedInheritanceModel.findOneAndUpdate(
         { vaultAddress: vault.toLowerCase(), heirAddress: heir.toLowerCase() },
-        { $set: { sealedVideo: video, sealedVideoBy: sealedBy.toLowerCase(), sealedVideoAt } },
+        { $set: updateData },
         { new: true }
       );
       if (!doc) return null;
@@ -225,6 +265,7 @@ export async function saveSealedVideo(
     sealedVideo: video,
     sealedVideoBy: sealedBy.toLowerCase(),
     sealedVideoAt,
+    sealedVideoForPublicKey: sealedVideoForPublicKey || existing.sealedVideoForPublicKey,
   };
   memoryCache.set(key, rec);
   persistToFile();
