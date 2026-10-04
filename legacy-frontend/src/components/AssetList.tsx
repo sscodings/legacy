@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 import {
   useAccount,
   useBalance,
@@ -115,7 +116,11 @@ export function AssetList({
     return DEFAULT_TOKENS;
   });
 
-  const [selectedTokenIndex, setSelectedTokenIndex] = useState<number>(0);
+  // Start on the first token that can actually be assigned (native ETH can't be), so the dialog opens ready to use
+  const [selectedTokenIndex, setSelectedTokenIndex] = useState<number>(() => {
+    const firstAssignable = DEFAULT_TOKENS.findIndex((t) => !t.isNative);
+    return firstAssignable === -1 ? 0 : firstAssignable;
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [tokenFilter, setTokenFilter] = useState<"ALL" | "IN_WALLET">("ALL");
 
@@ -301,6 +306,12 @@ export function AssetList({
 
   // Currently active selected token
   const selectedToken = displayTokens[selectedTokenIndex] || displayTokens[0];
+
+  // Token mode needs an assignable token and a positive amount before the confirm button wakes up
+  const isTokenFormIncomplete =
+    modalMode === "TOKENS"
+      ? Boolean(selectedToken?.isNative) || !(Number(amount) > 0)
+      : !manualLabel.trim() || !isAddress(manualExecutorAddress.trim());
 
   // Filtered tokens for token picker
   const filteredTokens = useMemo(() => {
@@ -527,16 +538,8 @@ export function AssetList({
     resetForm();
   };
 
-  // Close on Escape for keyboard accessibility
-  React.useEffect(() => {
-    if (!showAssignModal) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeModal();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAssignModal, isSubmitting]);
+  // Escape, scroll lock, focus trap and focus restore for the assignment dialog
+  const assignDialogRef = useDialogBehavior<HTMLDivElement>(showAssignModal, closeModal);
 
   const handleRemove = async (assetId: `0x${string}`) => {
     try {
@@ -575,7 +578,7 @@ export function AssetList({
               margin: 0,
             }}
           >
-            Asset Allocations
+            Assets
           </h3>
           <p
             style={{
@@ -585,10 +588,10 @@ export function AssetList({
               lineHeight: 1.5,
             }}
           >
-            Non-custodial executor adapters programmed to transfer control upon succession.
+            The tokens, NFTs and ENS names each heir will receive.
           </p>
         </div>
-        {isGreen && heirs.length > 0 && (
+        {isGreen && heirs.length > 0 && assets.length > 0 && (
           <button
             type="button"
             onClick={() => {
@@ -598,8 +601,17 @@ export function AssetList({
             className="btn-brass"
             style={{ padding: "10px 20px", fontSize: "0.8125rem", borderRadius: 0 }}
           >
-            + ASSIGN NEW ASSET →
+            + ASSIGN ASSET →
           </button>
+        )}
+        {!isGreen && (
+          <span className="lock-note">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="5" y="11" width="14" height="10" rx="2" />
+              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+            </svg>
+            Check in to make changes
+          </span>
         )}
       </div>
 
@@ -627,8 +639,8 @@ export function AssetList({
             }}
           >
             {heirs.length === 0
-              ? "Designate at least one authorized heir before mapping succession assets."
-              : "No assets mapped yet. Assign ERC-20 tokens or digital assets directly to authorized heirs."}
+              ? "Add an heir first, then choose what they receive."
+              : "Nothing assigned yet. Pick a token, NFT or ENS name and who receives it."}
           </p>
           {isGreen && heirs.length > 0 && (
             <button
@@ -640,7 +652,7 @@ export function AssetList({
               className="btn-hero-action"
               style={{ padding: "10px 20px", fontSize: "0.8125rem", borderRadius: 0, marginTop: 0 }}
             >
-              <span>+ Map First Asset →</span>
+              <span>+ Assign first asset →</span>
             </button>
           )}
         </div>
@@ -691,7 +703,7 @@ export function AssetList({
                     <span
                       style={{
                         padding: "3px 8px",
-                        borderRadius: "4px",
+                        borderRadius: 0,
                         fontSize: "0.75rem",
                         fontWeight: 600,
                         backgroundColor: asset.executed
@@ -751,6 +763,7 @@ export function AssetList({
           }}
         >
           <div
+            ref={assignDialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="assign-asset-title"
@@ -762,7 +775,9 @@ export function AssetList({
               boxShadow: "0 24px 64px rgba(0, 0, 0, 0.85), 0 0 40px rgba(184, 137, 74, 0.08)",
               display: "flex",
               flexDirection: "column",
-              overflow: "hidden",
+              // Scroll inside the dialog on short screens instead of clipping the action buttons
+              maxHeight: "calc(100dvh - 32px)",
+              overflowY: "auto",
             }}
           >
             {/* Modal Top Bar */}
@@ -803,7 +818,7 @@ export function AssetList({
                       fontWeight: 700,
                     }}
                   >
-                    World Chain Sepolia • Chain ID 4801
+                    World Chain Sepolia
                   </span>
                 </div>
                 <h3
@@ -818,7 +833,7 @@ export function AssetList({
                     margin: 0,
                   }}
                 >
-                  Assign Succession Asset
+                  Assign an asset
                 </h3>
               </div>
               <button
@@ -827,14 +842,16 @@ export function AssetList({
                 disabled={isSubmitting}
                 aria-label="Close dialog"
                 className="btn-secondary"
-                style={{ padding: "4px 8px", fontSize: "0.75rem", borderRadius: 0 }}
+                style={{ padding: "4px 10px", fontSize: "0.75rem", borderRadius: 0 }}
               >
-                Esc
+                Close ✕
               </button>
             </div>
 
             {/* Mode Switcher Segmented Control */}
             <div
+              role="tablist"
+              aria-label="Asset type"
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr 1fr",
@@ -846,6 +863,8 @@ export function AssetList({
             >
               <button
                 type="button"
+                role="tab"
+                aria-selected={modalMode === "TOKENS"}
                 onClick={() => {
                   setModalMode("TOKENS");
                   setIsSelectingToken(false);
@@ -869,10 +888,12 @@ export function AssetList({
                   transition: "all 0.15s ease",
                 }}
               >
-                Wallet Tokens (ERC-20)
+                Tokens (ERC-20)
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={modalMode === "EXECUTOR"}
                 onClick={() => {
                   setModalMode("EXECUTOR");
                   setIsSelectingToken(false);
@@ -896,7 +917,7 @@ export function AssetList({
                   transition: "all 0.15s ease",
                 }}
               >
-                Custom Executor (NFT / ENS)
+                NFT or ENS name
               </button>
             </div>
 
@@ -915,7 +936,7 @@ export function AssetList({
                         fontWeight: 700,
                       }}
                     >
-                      Select or Import Token
+                      Choose a token
                     </span>
                     <button
                       type="button"
@@ -1144,7 +1165,7 @@ export function AssetList({
                                         color: "var(--text-secondary)",
                                       }}
                                     >
-                                      Native
+                                      Native · can&apos;t assign
                                     </span>
                                   )}
                                   {t.isCustom && (
@@ -1237,7 +1258,7 @@ export function AssetList({
                               gap: "4px",
                             }}
                           >
-                            Switch / Import Token ▾
+                            Change token ▾
                           </button>
                         </div>
 
@@ -1328,7 +1349,7 @@ export function AssetList({
                       )}
 
                       {/* Official Circle Faucet Callout */}
-                      {selectedToken?.symbol === "USDC" && (
+                      {selectedToken?.symbol === "USDC" && parseFloat(selectedToken?.formattedBalance ?? "0") === 0 && (
                         <div
                           style={{
                             padding: "12px 14px",
@@ -1343,10 +1364,10 @@ export function AssetList({
                         >
                           <div>
                             <div style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--accent-brass)" }}>
-                              Official Circle Native USDC (World Chain Sepolia)
+                              No test USDC in this wallet yet
                             </div>
                             <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                              Contract: <code>0x66145f...aeA88</code> • Dispensed via Circle Developer Faucet
+                              Get free testnet USDC from the Circle faucet, then come back.
                             </div>
                           </div>
                           <a
@@ -1511,7 +1532,7 @@ export function AssetList({
                     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                       <div>
                         <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>
-                          Asset Label (e.g. 50,000 DAI Treasury or Rare Ape #42)
+                          Name (so you and your heir can recognise it)
                         </label>
                         <input
                           type="text"
@@ -1525,7 +1546,7 @@ export function AssetList({
 
                       <div>
                         <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>
-                          Asset Type
+                          What are you assigning?
                         </label>
                         <select
                           value={manualAssetType}
@@ -1533,20 +1554,20 @@ export function AssetList({
                           className="input-instrument"
                           style={{ backgroundColor: "var(--bg-base)" }}
                         >
-                          <option value="ERC20">ERC-20 Token Adapter</option>
-                          <option value="ERC721">ERC-721 NFT Adapter</option>
-                          <option value="ENS">ENS Resolver Adapter</option>
+                          <option value="ERC20">Token (ERC-20)</option>
+                          <option value="ERC721">NFT (ERC-721)</option>
+                          <option value="ENS">ENS name</option>
                         </select>
                       </div>
 
                       <div>
                         <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>
-                          Executor Contract Address (IVaultExecutor)
+                          Adapter contract address
                         </label>
                         <input
                           type="text"
                           className="input-instrument font-data"
-                          placeholder="0x... deployed contract"
+                          placeholder="0x… address of the deployed adapter"
                           value={manualExecutorAddress}
                           onChange={(e) => setManualExecutorAddress(e.target.value)}
                           required
@@ -1568,7 +1589,7 @@ export function AssetList({
                         fontWeight: 600,
                       }}
                     >
-                      Designated Heir / Beneficiary
+                      Who receives it
                     </label>
                     <select
                       value={selectedHeir}
@@ -1578,7 +1599,7 @@ export function AssetList({
                     >
                       {heirs.map((h, i) => (
                         <option key={h} value={h}>
-                          Heir #{i + 1} — {h}
+                          Heir #{i + 1} — {h.slice(0, 8)}…{h.slice(-6)}
                         </option>
                       ))}
                     </select>
@@ -1631,7 +1652,20 @@ export function AssetList({
                   )}
 
                   {/* Action Buttons */}
-                  <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "10px",
+                      marginTop: "4px",
+                      // Pinned so Cancel / Confirm stay reachable when the dialog scrolls on short screens
+                      position: "sticky",
+                      bottom: 0,
+                      marginBottom: -24,
+                      paddingTop: 12,
+                      paddingBottom: 24,
+                      backgroundColor: "var(--bg-elevated)",
+                    }}
+                  >
                     <button
                       type="button"
                       onClick={closeModal}
@@ -1643,7 +1677,8 @@ export function AssetList({
                     </button>
                     <button
                       type="submit"
-                      disabled={isSubmitting || (modalMode === "TOKENS" && selectedToken?.isNative)}
+                      disabled={isSubmitting || isTokenFormIncomplete}
+                      title={isTokenFormIncomplete && !selectedToken?.isNative ? "Fill in every field to continue" : undefined}
                       className="btn-brass"
                       style={{
                         flex: 2,
@@ -1651,18 +1686,15 @@ export function AssetList({
                         borderRadius: 0,
                         fontSize: "0.8125rem",
                         fontWeight: 700,
-                        opacity: modalMode === "TOKENS" && selectedToken?.isNative ? 0.5 : 1,
-                        cursor:
-                          modalMode === "TOKENS" && selectedToken?.isNative
-                            ? "not-allowed"
-                            : "pointer",
+                        opacity: isTokenFormIncomplete ? 0.5 : 1,
+                        cursor: isTokenFormIncomplete ? "not-allowed" : "pointer",
                       }}
                     >
                       {isSubmitting
-                        ? "Orchestrating Allocation..."
+                        ? "Confirm in your wallet…"
                         : modalMode === "EXECUTOR"
-                        ? "Assign Custom Executor →"
-                        : `Confirm & Allocate ${amount ? `${amount} ` : ""}${selectedToken?.symbol} →`}
+                        ? "Assign asset →"
+                        : `Assign ${amount ? `${amount} ` : ""}${selectedToken?.symbol} to heir →`}
                     </button>
                   </div>
                 </form>

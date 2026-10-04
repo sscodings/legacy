@@ -50,8 +50,13 @@ export default function RootLayout({
       <body>
         <Providers>
           <div className="app-layout">
+            <a href="#main-content" className="skip-link">
+              Skip to content
+            </a>
             <Header />
-            <main style={{ flex: 1 }}>{children}</main>
+            <main id="main-content" tabIndex={-1} style={{ flex: 1, outline: "none" }}>
+              {children}
+            </main>
             <Footer />
           </div>
         </Providers>

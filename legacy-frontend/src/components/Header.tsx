@@ -159,11 +159,19 @@ export function Header() {
             <>
               <Link
                 href="/vault"
-                style={navItemStyle(pathname.startsWith("/vault") || pathname === "/claim")}
+                style={navItemStyle(pathname.startsWith("/vault"))}
                 aria-current={pathname.startsWith("/vault") ? "page" : undefined}
                 id="nav-link-vault"
               >
                 DASHBOARD
+              </Link>
+              <Link
+                href="/claim"
+                style={navItemStyle(pathname === "/claim")}
+                aria-current={pathname === "/claim" ? "page" : undefined}
+                id="nav-link-claim"
+              >
+                HEIR PORTAL
               </Link>
               <Link
                 href="/lookup"
@@ -213,7 +221,7 @@ export function Header() {
                   id="connect-wallet-btn"
                   style={{ padding: "8px 20px", fontSize: "0.75rem" }}
                 >
-                  SELECT WALLET
+                  CONNECT WALLET
                 </button>
               </div>
             ) : isWrongChain ? (

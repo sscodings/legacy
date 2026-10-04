@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 
 interface VaultCreationModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export function VaultCreationModal({ isOpen, onClose, onDeploy, defaultOwnerName
   const [name, setName] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useDialogBehavior<HTMLFormElement>(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen) {
@@ -55,6 +57,7 @@ export function VaultCreationModal({ isOpen, onClose, onDeploy, defaultOwnerName
       }}
     >
       <form
+        ref={dialogRef}
         onSubmit={handleSubmit}
         className="deployment-modal modal-surface-animate"
         role="dialog"
@@ -81,6 +84,7 @@ export function VaultCreationModal({ isOpen, onClose, onDeploy, defaultOwnerName
               type="text"
               className="flow-input"
               placeholder="Family Estate"
+              required
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={MAX_NAME_LENGTH}
@@ -89,7 +93,7 @@ export function VaultCreationModal({ isOpen, onClose, onDeploy, defaultOwnerName
           </label>
 
           <label className="flow-field">
-            <span>Your name</span>
+            <span>Your name (shown to heirs)</span>
             <input
               type="text"
               className="flow-input"
@@ -102,13 +106,18 @@ export function VaultCreationModal({ isOpen, onClose, onDeploy, defaultOwnerName
           </label>
         </div>
 
-        <div className="flow-footer" style={{ justifyContent: "flex-end" }}>
-          <button type="button" onClick={onClose} className="flow-btn flow-btn--ghost">
-            Cancel
-          </button>
-          <button type="submit" disabled={!canSubmit} className="flow-btn">
-            Create vault
-          </button>
+        <div className="flow-footer" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-secondary)", maxWidth: 220, lineHeight: 1.4 }}>
+            Next, you&apos;ll approve one transaction in your wallet.
+          </p>
+          <div style={{ display: "flex", gap: 10, marginLeft: "auto" }}>
+            <button type="button" onClick={onClose} className="flow-btn flow-btn--ghost">
+              Cancel
+            </button>
+            <button type="submit" disabled={!canSubmit} className="flow-btn">
+              Create vault
+            </button>
+          </div>
         </div>
       </form>
     </div>
