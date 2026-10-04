@@ -1,15 +1,27 @@
 import { NextResponse } from "next/server";
 import { createPublicClient, http, isAddress } from "viem";
-import { worldChainSepolia } from "@/lib/constants";
+import { worldChainSepolia, shortAddress } from "@/lib/constants";
 import { LegacyVaultABI } from "@/lib/contracts/abis";
-import { getAllSubscriptions, updateLastAlert, updateLastClaimAlert } from "@/lib/notifications/store";
+import {
+  getAllSubscriptions,
+  updateLastAlert,
+  updateLastClaimAlert,
+  updateLastFundingAlert,
+} from "@/lib/notifications/store";
 import {
   dispatchHeartbeatAlert,
   dispatchClaimAlert,
   dispatchClaimExpiringAlert,
   dispatchClaimExpiredAlert,
   dispatchTestAlert,
+  dispatchUnderfundedAlert,
 } from "@/lib/notifications/dispatcher";
+import { getServerPublicClient } from "@/lib/inheritance/chain";
+import {
+  loadVaultAllocations,
+  assessAllocations,
+  getHealthReasonMessage,
+} from "@/lib/health/allocation-health";
 import { AlertThreshold, VaultNotificationSubscription } from "@/types/notifications";
 
 export const dynamic = "force-dynamic";
@@ -371,6 +383,76 @@ async function handleHeartbeatCheck(request: Request) {
           }
         } catch (claimErr) {
           console.warn(`[Cron] Error checking claims for vault ${sub.vaultAddress}:`, claimErr);
+        }
+
+        // ── Inheritance Asset Health Monitoring ───────────────────────────────
+        // While the vault is Green or Amber, assess allocations.
+        // If any allocations are underfunded and fingerprint has changed, dispatch email.
+        if (status === 0 || status === 1) {
+          try {
+            const serverClient = getServerPublicClient();
+            const allocations = await loadVaultAllocations(
+              serverClient,
+              sub.vaultAddress as `0x${string}`
+            );
+
+            if (allocations.length > 0) {
+              const healthResults = await assessAllocations(
+                serverClient,
+                sub.vaultAddress as `0x${string}`,
+                sub.ownerAddress as `0x${string}`,
+                allocations
+              );
+
+              const underfunded = healthResults.filter((h) => h.state === "underfunded");
+              if (underfunded.length > 0) {
+                const fingerprint = underfunded
+                  .map((h) => h.assetId.toLowerCase())
+                  .sort()
+                  .join(",");
+
+                if (sub.lastFundingAlert?.fingerprint !== fingerprint) {
+                  const underfundedDetails = underfunded.map((h) => ({
+                    label: h.label || shortAddress(h.executor),
+                    reason: getHealthReasonMessage(h.reason),
+                  }));
+
+                  const dispatchRes = await dispatchUnderfundedAlert(
+                    sub,
+                    underfundedDetails,
+                    baseUrl
+                  );
+
+                  if (dispatchRes.success) {
+                    await updateLastFundingAlert(sub.vaultAddress, fingerprint);
+                    alertsDispatched++;
+                  }
+
+                  results.push({
+                    vault: sub.vaultAddress,
+                    type: "underfunded_alert",
+                    fingerprint,
+                    underfundedCount: underfunded.length,
+                    notified: dispatchRes.channelsNotified,
+                    error: dispatchRes.error,
+                  });
+                } else {
+                  results.push({
+                    vault: sub.vaultAddress,
+                    type: "underfunded_suppressed_dedupe",
+                    fingerprint,
+                  });
+                }
+              }
+            }
+          } catch (fundingErr) {
+            console.warn(`[Cron] Error checking funding health for vault ${sub.vaultAddress}:`, fundingErr);
+            results.push({
+              vault: sub.vaultAddress,
+              type: "underfunded_check_failed",
+              error: fundingErr instanceof Error ? fundingErr.message : String(fundingErr),
+            });
+          }
         }
       } catch (err) {
         console.error(`[Cron] Error evaluating vault ${sub.vaultAddress}:`, err);

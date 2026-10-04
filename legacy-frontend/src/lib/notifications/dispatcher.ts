@@ -500,3 +500,69 @@ export async function dispatchTestAlert(
 
   return { success: channelsNotified.length > 0, channelsNotified };
 }
+
+export interface UnderfundedAssetItem {
+  label: string;
+  reason: string;
+}
+
+export async function dispatchUnderfundedAlert(
+  sub: VaultNotificationSubscription,
+  underfundedAssets: UnderfundedAssetItem[],
+  baseUrl: string = process.env.NEXT_PUBLIC_APP_URL || "https://legacy-drab-two.vercel.app"
+): Promise<{ success: boolean; channelsNotified: string[]; error?: string }> {
+  if (!sub.email) {
+    return { success: false, channelsNotified: [], error: "No email registered for vault" };
+  }
+
+  const shortVault = `${sub.vaultAddress.slice(0, 6)}...${sub.vaultAddress.slice(-4)}`;
+  const subject = `[Legacy Alert] Inheritance assets underfunded: Vault ${shortVault}`;
+  const vaultUrl = `${baseUrl}/vault?v=${sub.vaultAddress}&tab=assets`;
+
+  const assetListText = underfundedAssets
+    .map((a) => `• ${a.label}: ${a.reason}`)
+    .join("\n");
+
+  const assetListHtml = underfundedAssets
+    .map((a) => `<li style="margin-bottom: 6px;"><strong>${a.label}</strong> — <span style="color: #D99A3D;">${a.reason}</span></li>`)
+    .join("");
+
+  const explanation = `An autonomous check of your vault detected that one or more allocated assets cannot currently pay out upon succession:<br><ul style="margin: 12px 0 16px 20px; padding: 0; line-height: 1.6;">${assetListHtml}</ul>Top up the required token balances or update your token allowances so heirs can successfully receive their assigned inheritance.`;
+
+  const html = generateEmailTemplate({
+    headline: "Inheritance Assets Underfunded",
+    statusColor: "#D99A3D",
+    statusBadge: "UNDERFUNDED",
+    vaultAddress: sub.vaultAddress,
+    explanation,
+    timeHighlight: `${underfundedAssets.length} asset${underfundedAssets.length > 1 ? "s" : ""} at risk`,
+    ctaText: "Review Vault Assets",
+    ctaUrl: vaultUrl,
+  });
+
+  const channelsNotified: string[] = [];
+
+  const res = await sendEmailNotification({
+    to: sub.email,
+    subject,
+    html,
+    text: `Legacy Protocol Alert: Inheritance assets are currently underfunded for vault ${sub.vaultAddress}.\n\n${assetListText}\n\nReview your vault: ${vaultUrl}`,
+  });
+
+  if (res.success) {
+    channelsNotified.push("email");
+  } else {
+    return { success: false, channelsNotified, error: res.error };
+  }
+
+  await recordAlertLog(sub.vaultAddress, {
+    threshold: "underfunded",
+    title: subject,
+    message: `${underfundedAssets.length} asset(s) underfunded: ${underfundedAssets.map((a) => a.label).join(", ")}`,
+    channel: "email",
+    success: true,
+  });
+
+  return { success: true, channelsNotified };
+}
+

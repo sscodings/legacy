@@ -74,6 +74,12 @@ function docToSubscription(doc: IVaultSubscription): VaultNotificationSubscripti
           heirAddress: doc.lastClaimAlertSent.heirAddress as `0x${string}`,
         }
       : undefined,
+    lastFundingAlert: doc.lastFundingAlert
+      ? {
+          fingerprint: doc.lastFundingAlert.fingerprint,
+          timestamp: doc.lastFundingAlert.timestamp,
+        }
+      : undefined,
     recentAlerts: (doc.recentAlerts || []).map((a) => ({
       id: a.id,
       threshold: a.threshold,
@@ -298,3 +304,36 @@ export async function updateLastClaimAlert(
     persistToFile();
   }
 }
+
+export async function updateLastFundingAlert(
+  vaultAddress: string,
+  fingerprint: string
+): Promise<void> {
+  const key = vaultAddress.toLowerCase();
+  const alertMeta = {
+    fingerprint,
+    timestamp: Date.now(),
+  };
+
+  try {
+    const conn = await connectToDatabase();
+    if (conn) {
+      await VaultSubscriptionModel.updateOne(
+        { vaultAddress: key },
+        { $set: { lastFundingAlert: alertMeta } }
+      );
+    }
+  } catch (err) {
+    console.warn("[Store] Mongo updateLastFundingAlert failed:", err);
+  }
+
+  loadFromFile();
+  const existing = memoryCache.get(key);
+  if (existing) {
+    existing.lastFundingAlert = alertMeta;
+    existing.updatedAt = Date.now();
+    memoryCache.set(key, existing);
+    persistToFile();
+  }
+}
+

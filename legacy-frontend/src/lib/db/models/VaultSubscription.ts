@@ -29,6 +29,10 @@ export interface IVaultSubscription extends Document {
     claimInitiatedAt: number;
     heirAddress: string;
   };
+  lastFundingAlert?: {
+    fingerprint: string;
+    timestamp: number;
+  };
   recentAlerts: IAlertLog[];
   createdAt: Date;
   updatedAt: Date;
@@ -49,6 +53,7 @@ const AlertLogSchema = new Schema<IAlertLog>(
         "claim_expired",
         "vault_created",
         "test",
+        "underfunded",
       ],
       required: true,
     },
@@ -105,6 +110,7 @@ const VaultSubscriptionSchema = new Schema<IVaultSubscription>(
           "claim_expired",
           "vault_created",
           "test",
+          "underfunded",
         ],
       },
       timestamp: { type: Number },
@@ -123,11 +129,16 @@ const VaultSubscriptionSchema = new Schema<IVaultSubscription>(
           "claim_expired",
           "vault_created",
           "test",
+          "underfunded",
         ],
       },
       timestamp: { type: Number },
       claimInitiatedAt: { type: Number },
       heirAddress: { type: String, lowercase: true, trim: true },
+    },
+    lastFundingAlert: {
+      fingerprint: { type: String },
+      timestamp: { type: Number },
     },
     recentAlerts: {
       type: [AlertLogSchema],

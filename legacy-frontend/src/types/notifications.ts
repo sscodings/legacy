@@ -7,7 +7,8 @@ export type AlertThreshold =
   | "claim_expiring_24h"
   | "claim_expired"
   | "vault_created"
-  | "test";
+  | "test"
+  | "underfunded";
 
 export type NotificationChannel = "email" | "push";
 
@@ -40,6 +41,10 @@ export interface VaultNotificationSubscription {
     timestamp: number;
     claimInitiatedAt: number;
     heirAddress: `0x${string}`;
+  };
+  lastFundingAlert?: {
+    fingerprint: string;
+    timestamp: number;
   };
   recentAlerts?: AlertLogEntry[];
 }
