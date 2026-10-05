@@ -41,7 +41,7 @@ contract GuardianAttestationTest is Test {
         vault = LegacyVault(factory.createVault(verifierAdapter, CHECK_IN_INTERVAL, GRACE_PERIOD, CONTESTABLE_WINDOW));
 
         vm.prank(owner);
-        vault.registerLiveness(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vault.registerLiveness(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
 
         vm.prank(owner);
         vault.addHeir(heir);
@@ -49,7 +49,7 @@ contract GuardianAttestationTest is Test {
 
     function _checkIn() internal {
         vm.prank(owner);
-        vault.checkIn(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF);
+        vault.checkIn(abi.encode(DUMMY_ROOT, DUMMY_NULLIFIER, DUMMY_PROOF));
     }
 
     function _addGuardian(address g) internal {

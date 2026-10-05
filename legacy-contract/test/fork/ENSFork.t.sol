@@ -74,7 +74,7 @@ contract ENSForkTest is Test {
         uint256[8] memory dummyProof = [uint256(0), 0, 0, 0, 0, 0, 0, 0];
 
         vm.prank(realOwner);
-        vault.registerLiveness(dummyRoot, dummyNullifier, dummyProof);
+        vault.registerLiveness(abi.encode(dummyRoot, dummyNullifier, dummyProof));
 
         // Deploy ENSResolverAdapter pointing to the real ENS Registry and the real node
         adapter = new ENSResolverAdapter(ENS_REGISTRY, VITALIK_NODE, address(vault));

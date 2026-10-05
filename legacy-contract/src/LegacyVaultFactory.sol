@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {LegacyVault} from "./LegacyVault.sol";
-import {WorldIDVerifierAdapter} from "./adapters/WorldIDVerifierAdapter.sol";
+import {ILivenessVerifier} from "./interfaces/ILivenessVerifier.sol";
 
 contract LegacyVaultFactory {
     using Clones for address;
@@ -22,7 +22,7 @@ contract LegacyVaultFactory {
     }
 
     function createVault(
-        WorldIDVerifierAdapter verifier,
+        ILivenessVerifier verifier,
         uint256 checkInInterval,
         uint256 gracePeriod,
         uint256 contestableWindow
