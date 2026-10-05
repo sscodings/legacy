@@ -9,6 +9,7 @@ import { VaultStatus, CONTRACT_ADDRESSES, shortAddress, humanDuration, timeAgo }
 import { fetchVaultMeta, type VaultMetaRecord } from "@/lib/vault-meta/client";
 import { LegacyVaultABI } from "@/lib/contracts/abis";
 import { StatusLamp } from "@/components/StatusLamp";
+import { useAllocationHealth } from "@/hooks/useAllocationHealth";
 import { TransparencyLookupSkeleton } from "@/components/Skeleton";
 
 function CopyButton({ value }: { value: string }) {
@@ -156,6 +157,13 @@ export default function TransparencyLookup() {
     functionName: "owner",
     query: { enabled: Boolean(queriedAddress) },
   });
+
+  // Public answer to "would the heirs actually receive what they were
+  // promised?" — assets stay in the owner's wallet, so this is checked live.
+  const { readiness, isLoading: isCheckingBacking } = useAllocationHealth(
+    queriedAddress ?? undefined,
+    owner as `0x${string}` | undefined
+  );
 
   const { data: heirCount } = useReadContract({
     address: queriedAddress ?? undefined,
@@ -413,6 +421,25 @@ export default function TransparencyLookup() {
                 </FactRow>
                 <FactRow label="Heirs">
                   {heirTotal === null ? "—" : heirTotal === 0 ? "None yet" : String(heirTotal)}
+                </FactRow>
+                <FactRow label="Allocations backed">
+                  {isCheckingBacking && readiness.backed + readiness.broken === 0 ? (
+                    "Checking…"
+                  ) : readiness.pending === 0 ? (
+                    "Nothing assigned yet"
+                  ) : readiness.broken > 0 ? (
+                    <span style={{ color: "var(--status-red)" }}>
+                      {readiness.backed} of {readiness.pending} — {readiness.broken} would not pay out in full
+                    </span>
+                  ) : readiness.unknown > 0 ? (
+                    <span style={{ color: "var(--text-secondary)" }}>
+                      {readiness.backed} of {readiness.pending} confirmed
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--status-green)" }}>
+                      All {readiness.pending} — would transfer in full today
+                    </span>
+                  )}
                 </FactRow>
                 <FactRow label="World ID">
                   <span style={{ color: livenessRegistered ? "var(--status-green)" : "var(--status-amber)" }}>
