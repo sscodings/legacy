@@ -43,6 +43,10 @@ import {
   type VaultMetaRecord,
 } from "@/lib/vault-meta/client";
 import { useMounted } from "@/hooks/useMounted";
+import { PolicyCard } from "@/components/policy/PolicyCard";
+import { PolicyEngineModal } from "@/components/policy/PolicyEngineModal";
+import { usePolicyEngine } from "@/hooks/usePolicyEngine";
+import { type VaultPolicyContext } from "@/lib/policy/types";
 
 // LegacyVault ABI plus the World ID errors that bubble up through
 // registerLiveness / checkIn, so simulated reverts decode to a named error.
@@ -79,7 +83,7 @@ async function assertLivenessCallSucceeds(
   }
 }
 
-const VAULT_TABS = ["heirs", "guardians", "assets", "parameters", "activity", "watchdog", "message"] as const;
+const VAULT_TABS = ["heirs", "guardians", "assets", "policy", "parameters", "activity", "watchdog", "message"] as const;
 type VaultTab = (typeof VAULT_TABS)[number];
 
 export default function VaultDashboardPage() {
@@ -300,6 +304,17 @@ export default function VaultDashboardPage() {
 
   const { writeContractAsync } = useWriteContract();
 
+  // ── Policy Engine state & hook ────────────────────────────────────
+  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
+  const {
+    policyVersion,
+    policyHash,
+    rules: policyRules,
+    activePolicy,
+    refetch: refetchPolicy,
+    savePolicyLocally,
+  } = usePolicyEngine(selectedVault ?? undefined);
+
   // ── Derived state ─────────────────────────────────────────────────
   const status = rawStatus !== undefined ? (Number(rawStatus) as VaultStatus) : VaultStatus.Green;
   const lastCheckIn = lastCheckInRaw !== undefined ? BigInt(lastCheckInRaw.toString()) : BigInt(0);
@@ -310,13 +325,39 @@ export default function VaultDashboardPage() {
     optimisticLiveness && selectedVault && optimisticLiveness.vault.toLowerCase() === selectedVault.toLowerCase()
       ? optimisticLiveness.value
       : Boolean(livenessRegisteredRaw);
-  const heirs = (rawHeirs as readonly `0x${string}`[]) || [];
+  const heirs = useMemo(() => (rawHeirs as readonly `0x${string}`[]) || [], [rawHeirs]);
   const heirNames = heirNameMap(vaultMeta);
   const vaultName = vaultMeta?.vaultName;
   const ownerName = vaultMeta?.ownerName;
   const guardians = (rawGuardians as readonly `0x${string}`[]) || [];
   const deathAttestationCount = deathAttestationCountRaw !== undefined ? Number(deathAttestationCountRaw) : 0;
   const deathConfirmed = Boolean(deathConfirmedRaw);
+
+  const policyContext: VaultPolicyContext = useMemo(
+    () => ({
+      vaultAddress: (selectedVault || "0x0000000000000000000000000000000000000000") as `0x${string}`,
+      ownerAddress: ((vaultOwner as `0x${string}`) || address || "0x0000000000000000000000000000000000000000") as `0x${string}`,
+      isOwnerConnected: Boolean(address && vaultOwner && isAddressEqual(address, vaultOwner as `0x${string}`)),
+      vaultStatus: status,
+      heirs: heirs.map((h) => ({
+        address: h,
+        name: heirNames[h.toLowerCase() as `0x${string}`],
+      })),
+      assets: assetList.map((a) => {
+        const asset = a.allocation?.asset;
+        return {
+          assetId: a.assetId,
+          label: a.label,
+          kind: (asset?.kind || "OTHER") as "ERC20" | "ERC721" | "ENS" | "OTHER",
+          token: asset && asset.kind === "ERC20" ? asset.token : undefined,
+          amount: asset && asset.kind === "ERC20" ? asset.amount : undefined,
+          symbol: asset && asset.kind === "ERC20" ? asset.symbol : undefined,
+          decimals: asset && asset.kind === "ERC20" ? asset.decimals : undefined,
+        };
+      }),
+    }),
+    [selectedVault, vaultOwner, address, status, heirs, heirNames, assetList]
+  );
 
   // Load off-chain metadata (vault name + beneficiary names) whenever the
   // selected vault changes. Names are best-effort; a failure just falls back
@@ -1173,6 +1214,7 @@ export default function VaultDashboardPage() {
                     { id: "heirs", label: `Heirs (${heirs.length})` },
                     { id: "guardians", label: `Guardians (${guardians.length})` },
                     { id: "assets", label: `Assets (${assetList.length})` },
+                    { id: "policy", label: policyVersion > 0 ? `Policy (#${policyVersion})` : `Policy` },
                     { id: "parameters", label: `Timing` },
                     { id: "activity", label: `Activity` },
                     { id: "watchdog", label: `Alerts` },
@@ -1243,6 +1285,69 @@ export default function VaultDashboardPage() {
                     />
                   )}
 
+                  {activeTab === "policy" && (
+                    <div className="panel-stack" style={{ gap: "16px" }}>
+                      <PolicyCard
+                        activePolicy={activePolicy}
+                        policyVersion={policyVersion}
+                        policyHash={policyHash}
+                        onOpenBuilder={() => setIsPolicyModalOpen(true)}
+                        isOwner={Boolean(address && vaultOwner && isAddressEqual(address, vaultOwner as `0x${string}`))}
+                        vaultStatus={status}
+                      />
+                      {policyRules.length > 0 && (
+                        <div className="console-card" style={{ padding: "20px" }}>
+                          <h4 style={{ margin: "0 0 12px", fontSize: "0.8125rem", color: "var(--accent-brass)", textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "var(--font-mono, monospace)" }}>
+                            Active Policy Execution Rules
+                          </h4>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {policyRules.map((rule, idx) => (
+                              <div
+                                key={idx}
+                                style={{
+                                  padding: "12px 16px",
+                                  backgroundColor: "#10151A",
+                                  border: "1px solid var(--border-hairline)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  flexWrap: "wrap",
+                                  gap: "8px",
+                                }}
+                              >
+                                <div>
+                                  <strong style={{ color: "#EDEAE3", fontSize: "0.875rem", display: "block" }}>
+                                    {rule.beneficiaryName ? `${rule.beneficiaryName} (${rule.beneficiary.slice(0, 6)}…)` : rule.beneficiary}
+                                  </strong>
+                                  <span style={{ color: "#9A9E98", fontSize: "0.75rem" }}>
+                                    {rule.assetLabel || "Asset"}
+                                  </span>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                  <span className="font-data" style={{ color: "#EDEAE3", fontSize: "0.875rem" }}>
+                                    {rule.percentageBps > 0 ? `${(rule.percentageBps / 100).toFixed(0)}%` : "Fixed"}
+                                  </span>
+                                  <span
+                                    style={{
+                                      padding: "2px 8px",
+                                      fontSize: "0.6875rem",
+                                      fontFamily: "var(--font-mono, monospace)",
+                                      backgroundColor: rule.releaseDelaySeconds === 0n ? "rgba(76, 175, 109, 0.15)" : "rgba(217, 154, 61, 0.15)",
+                                      color: rule.releaseDelaySeconds === 0n ? "var(--status-green)" : "var(--status-amber)",
+                                      border: `1px solid ${rule.releaseDelaySeconds === 0n ? "rgba(76, 175, 109, 0.3)" : "rgba(217, 154, 61, 0.3)"}`,
+                                    }}
+                                  >
+                                    {rule.releaseDelaySeconds === 0n ? "Immediate (T+0)" : `T+${Number(rule.releaseDelaySeconds) / 86400}d`}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {activeTab === "parameters" && (
                     <VaultParameters
                       checkInInterval={checkInInterval}
@@ -1284,6 +1389,23 @@ export default function VaultDashboardPage() {
         </div>
         )}
       </div>
+
+      {/* Legacy Policy Engine Modal */}
+      {selectedVault && (
+        <PolicyEngineModal
+          isOpen={isPolicyModalOpen}
+          onClose={() => setIsPolicyModalOpen(false)}
+          context={policyContext}
+          healthMap={allocationHealth}
+          currentPolicyVersion={policyVersion}
+          onPolicyCommitted={(newVer, hash) => {
+            refetchPolicy();
+            if (activePolicy) {
+              savePolicyLocally({ ...activePolicy, version: newVer, policyHash: hash });
+            }
+          }}
+        />
+      )}
 
       {/* World ID Check-In / Registration Modal */}
       {selectedVault && (

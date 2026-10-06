@@ -36,6 +36,7 @@ export const CONTRACT_ADDRESSES = {
   verifier: (process.env.NEXT_PUBLIC_VERIFIER_ADDRESS || "") as `0x${string}`,
   implementation: (process.env.NEXT_PUBLIC_IMPLEMENTATION_ADDRESS || "") as `0x${string}`,
   smokeVault: (process.env.NEXT_PUBLIC_SMOKE_VAULT_ADDRESS || "") as `0x${string}`,
+  policyEngine: (process.env.NEXT_PUBLIC_POLICY_ENGINE_ADDRESS || "") as `0x${string}`,
 };
 
 export const WORLD_ID_CONFIG = {

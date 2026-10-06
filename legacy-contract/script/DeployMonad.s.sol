@@ -6,6 +6,7 @@ import {console} from "forge-std/console.sol";
 import {LegacyVault} from "../src/LegacyVault.sol";
 import {LegacyVaultFactory} from "../src/LegacyVaultFactory.sol";
 import {PasskeyVerifierAdapter} from "../src/adapters/PasskeyVerifierAdapter.sol";
+import {LegacyPolicyEngine} from "../src/LegacyPolicyEngine.sol";
 
 /// @notice Deploys Legacy with passkey liveness, for Monad.
 /// @dev Vaults created through this factory verify check-ins as WebAuthn
@@ -21,6 +22,7 @@ contract DeployMonadScript is Script {
         address verifierAdapter;
         address implementation;
         address factory;
+        address policyEngine;
     }
 
     function run() external returns (Deployment memory deployment) {
@@ -47,10 +49,17 @@ contract DeployMonadScript is Script {
         LegacyVaultFactory factory = new LegacyVaultFactory(address(implementation));
         console.log("LegacyVaultFactory deployed at:", address(factory));
 
+        // 4. LegacyPolicyEngine
+        LegacyPolicyEngine policyEngine = new LegacyPolicyEngine();
+        console.log("LegacyPolicyEngine deployed at:", address(policyEngine));
+
         vm.stopBroadcast();
 
         deployment = Deployment({
-            verifierAdapter: address(verifier), implementation: address(implementation), factory: address(factory)
+            verifierAdapter: address(verifier),
+            implementation: address(implementation),
+            factory: address(factory),
+            policyEngine: address(policyEngine)
         });
 
         console.log("--------------------------------------------------");

@@ -16,6 +16,8 @@ import { SealedMessageHeirPanel } from "@/components/SealedMessageHeirPanel";
 import { GuardianAttestationPanel } from "@/components/GuardianAttestationPanel";
 import { AllocationHealthBadge, AllocationReadinessBanner } from "@/components/AllocationHealth";
 import { useAllocationHealth } from "@/hooks/useAllocationHealth";
+import { PolicyClaimView } from "@/components/policy/PolicyClaimView";
+import { usePolicyEngine } from "@/hooks/usePolicyEngine";
 
 export default function HeirClaimPortal() {
   const mounted = useMounted();
@@ -162,6 +164,9 @@ export default function HeirClaimPortal() {
     vaultOwnerRaw as `0x${string}` | undefined,
     { heir: address }
   );
+
+  // ── Policy Engine integration ─────────────────────────────────────
+  const { policyVersion, policyHash, rules: policyRules } = usePolicyEngine(vaultAddress ?? undefined);
 
   // ── Derived state ─────────────────────────────────────────────────
   const vaultStatus =
@@ -517,6 +522,16 @@ export default function HeirClaimPortal() {
                 </span>
               )}
             </section>
+
+            {/* Policy Engine: Heir inheritance rules & delay schedule */}
+            {policyVersion > 0 && address && (
+              <PolicyClaimView
+                policyVersion={policyVersion}
+                policyHash={policyHash}
+                rules={policyRules}
+                claimantAddress={address}
+              />
+            )}
 
             {/* Action area: what the connected heir can do right now */}
             <section className="console-card">
